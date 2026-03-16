@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexora Admin Dashboard</title>
+  <link rel="stylesheet" href="/static/admin.css" />
+</head>
+<body class="admin-dashboard-page">
+  <header class="topbar">
+    <h1>Nexora Admin Dashboard</h1>
+    <div class="topbar-right">
+      <span>Logged in as <strong>{{ admin_user.username }}</strong></span>
+      <a class="button-link" href="/admin/logout">Logout</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel">
+      <h2>Server Overview</h2>
+      {% if notice %}
+        <div class="notice">{{ notice }}</div>
+      {% endif %}
+      <ul class="stats">
+        <li><strong>Total users:</strong> {{ users_total }}</li>
+        <li><strong>Total messages:</strong> {{ messages_total }}</li>
+        <li>
+          <strong>Latest message:</strong>
+          {% if latest_message_at %}
+            {{ latest_message_at }}
+          {% else %}
+            No messages yet
+          {% endif %}
+        </li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Create User</h2>
+      <form method="post" action="/admin/users/create" class="grid-form">
+        <label for="new_username">Username</label>
+        <input id="new_username" name="username" type="text" required minlength="3" />
+
+        <label for="new_password">Password</label>
+        <input id="new_password" name="password" type="password" required minlength="6" />
+
+        <label class="checkbox">
+          <input name="is_admin" type="checkbox" />
+          Create as admin
+        </label>
+
+        <button type="submit">Create User</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Users</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Username</th>
+              <th>Admin</th>
+              <th>Created</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+              <tr>
+                <td>{{ user.id }}</td>
+                <td>{{ user.username }}</td>
+                <td>{{ "Yes" if user.is_admin else "No" }}</td>
+                <td>{{ user.created_at }}</td>
+                <td>
+                  {% if user.id == admin_user.id %}
+                    <span class="muted">Current admin</span>
+                  {% else %}
+                    <form method="post" action="/admin/users/{{ user.id }}/delete">
+                      <button type="submit" class="danger">Delete</button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

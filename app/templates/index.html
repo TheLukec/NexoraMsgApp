@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexora Chat App</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <section id="login-panel" class="card">
+      <h1>Nexora Group Chat</h1>
+      <p>Connect to your server and sign in.</p>
+
+      <form id="login-form">
+        <label for="server_url">Server URL/IP</label>
+        <input id="server_url" name="server_url" type="text" placeholder="http://127.0.0.1:8000" required />
+
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" required />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required />
+
+        <button type="submit">Login</button>
+      </form>
+    </section>
+
+    <section id="chat-panel" class="card hidden">
+      <header class="chat-header">
+        <div>
+          <strong id="connected-user">Unknown user</strong>
+          <div class="muted">Connected to <span id="connected-server">-</span></div>
+        </div>
+        <div class="actions">
+          <button id="refresh-btn" type="button">Refresh</button>
+          <button id="logout-btn" type="button" class="danger">Logout</button>
+        </div>
+      </header>
+
+      <div id="messages" class="messages"></div>
+
+      <form id="send-form" class="send-form">
+        <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" required />
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
+    <p id="status" class="status">Ready</p>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
