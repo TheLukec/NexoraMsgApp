@@ -142,3 +142,8 @@ Change these before production use.
 - Passwords are hashed with bcrypt (`passlib`).
 - No DMs, no voice/video, no files, no reactions.
 - Code is intentionally simple and modular for easy upgrades.
+
+## Detailed Documentation
+
+For full in-depth project documentation, open the `README/` folder.
+Start with `README/README.md` and then continue through the detailed guides.
