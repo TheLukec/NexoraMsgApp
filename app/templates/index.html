@@ -26,24 +26,31 @@
       </form>
     </section>
 
-    <section id="chat-panel" class="card hidden">
-      <header class="chat-header">
-        <div>
-          <strong id="connected-user">Unknown user</strong>
-          <div class="muted">Connected to <span id="connected-server">-</span></div>
-        </div>
-        <div class="actions">
-          <button id="refresh-btn" type="button">Refresh</button>
-          <button id="logout-btn" type="button" class="danger">Logout</button>
-        </div>
-      </header>
+    <section id="chat-panel" class="card hidden chat-layout">
+      <div class="chat-main">
+        <header class="chat-header">
+          <div>
+            <strong id="connected-user">Unknown user</strong>
+            <div class="muted">Connected to <span id="connected-server">-</span></div>
+          </div>
+          <div class="actions">
+            <button id="refresh-btn" type="button">Refresh</button>
+            <button id="logout-btn" type="button" class="danger">Logout</button>
+          </div>
+        </header>
 
-      <div id="messages" class="messages"></div>
+        <div id="messages" class="messages"></div>
 
-      <form id="send-form" class="send-form">
-        <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" required />
-        <button type="submit">Send</button>
-      </form>
+        <form id="send-form" class="send-form">
+          <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" required />
+          <button type="submit">Send</button>
+        </form>
+      </div>
+
+      <aside class="users-sidebar" aria-label="Users">
+        <h2>Users</h2>
+        <div id="users-list" class="users-list"></div>
+      </aside>
     </section>
 
     <p id="status" class="status">Ready</p>

@@ -80,19 +80,11 @@ NexoraMsgApp/
    ```bash
    cd server
    ```
-2. Create `.env` from example:
-   ```bash
-   cp .env.example .env
-   ```
-   On Windows PowerShell:
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-3. Start services:
+2. Start services:
    ```bash
    docker compose up --build
    ```
-4. Access:
+3. Access:
    - API root: `http://localhost:8000/`
    - Admin panel: `http://localhost:8000/admin/login`
 
@@ -109,10 +101,6 @@ Change these before production use.
    python -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
-   ```
-   Windows PowerShell activation:
-   ```powershell
-   .\.venv\Scripts\Activate.ps1
    ```
 2. Ensure MySQL is running and update `DATABASE_URL` in environment.
 3. Run:
@@ -131,10 +119,6 @@ Change these before production use.
    python -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
-   ```
-   Windows PowerShell activation:
-   ```powershell
-   .\.venv\Scripts\Activate.ps1
    ```
 3. Start app:
    ```bash

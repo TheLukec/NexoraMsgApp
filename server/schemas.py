@@ -23,6 +23,11 @@ class UserPublic(BaseModel):
     created_at: datetime
 
 
+class UserPresenceOut(BaseModel):
+    username: str
+    online: bool
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str

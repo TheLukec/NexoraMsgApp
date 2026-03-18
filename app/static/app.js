@@ -9,6 +9,7 @@ const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
 const messageInput = document.getElementById("message-input");
 const messagesContainer = document.getElementById("messages");
+const usersListContainer = document.getElementById("users-list");
 const statusText = document.getElementById("status");
 const connectedUser = document.getElementById("connected-user");
 const connectedServer = document.getElementById("connected-server");
@@ -18,7 +19,8 @@ const state = {
   serverUrl: "",
   token: "",
   username: "",
-  pollTimer: null,
+  messagePollTimer: null,
+  usersPollTimer: null,
 };
 
 function setStatus(message) {
@@ -52,15 +54,20 @@ function clearSession() {
 }
 
 function stopPolling() {
-  if (state.pollTimer) {
-    clearInterval(state.pollTimer);
-    state.pollTimer = null;
+  if (state.messagePollTimer) {
+    clearInterval(state.messagePollTimer);
+    state.messagePollTimer = null;
+  }
+  if (state.usersPollTimer) {
+    clearInterval(state.usersPollTimer);
+    state.usersPollTimer = null;
   }
 }
 
 function startPolling() {
   stopPolling();
-  state.pollTimer = setInterval(fetchMessages, 3000);
+  state.messagePollTimer = setInterval(fetchMessages, 3000);
+  state.usersPollTimer = setInterval(fetchUsersPresence, 8000);
 }
 
 function showLogin() {
@@ -100,6 +107,43 @@ function renderMessages(messages) {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
+function userToElement(user) {
+  const row = document.createElement("div");
+  row.className = "user-row";
+
+  const indicator = document.createElement("span");
+  indicator.className = user.online ? "user-indicator online" : "user-indicator";
+
+  const name = document.createElement("span");
+  name.className = "user-name";
+  name.textContent = user.username;
+
+  const status = document.createElement("span");
+  status.className = "user-status";
+  status.textContent = user.online ? "online" : "offline";
+
+  row.appendChild(indicator);
+  row.appendChild(name);
+  row.appendChild(status);
+
+  return row;
+}
+
+function renderUsers(users) {
+  usersListContainer.innerHTML = "";
+
+  users.forEach((user) => {
+    usersListContainer.appendChild(userToElement(user));
+  });
+
+  if (users.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "No users found.";
+    usersListContainer.appendChild(empty);
+  }
+}
+
 async function fetchMessages() {
   if (!state.serverUrl || !state.token) {
     return;
@@ -114,7 +158,7 @@ async function fetchMessages() {
 
     if (response.status === 401) {
       setStatus("Session expired. Please login again.");
-      logout();
+      await logout(false);
       return;
     }
 
@@ -129,6 +173,37 @@ async function fetchMessages() {
     setStatus(`Messages updated at ${new Date().toLocaleTimeString()}`);
   } catch (error) {
     setStatus(`Connection error: ${error.message}`);
+  }
+}
+
+async function fetchUsersPresence() {
+  if (!state.serverUrl || !state.token) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${state.serverUrl}/api/users/presence`, {
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      setStatus("Session expired. Please login again.");
+      await logout(false);
+      return;
+    }
+
+    if (!response.ok) {
+      const body = await response.text();
+      setStatus(`Cannot load users: ${response.status} ${body}`);
+      return;
+    }
+
+    const users = await response.json();
+    renderUsers(users);
+  } catch (error) {
+    setStatus(`Users list error: ${error.message}`);
   }
 }
 
@@ -168,7 +243,9 @@ async function login(event) {
     saveSession();
     showChat();
     setStatus("Login successful");
+
     await fetchMessages();
+    await fetchUsersPresence();
     startPolling();
   } catch (error) {
     setStatus(`Login error: ${error.message}`);
@@ -192,6 +269,12 @@ async function sendMessage(event) {
       body: JSON.stringify({ content }),
     });
 
+    if (response.status === 401) {
+      setStatus("Session expired. Please login again.");
+      await logout(false);
+      return;
+    }
+
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       setStatus(data.detail || "Failed to send message");
@@ -200,21 +283,45 @@ async function sendMessage(event) {
 
     messageInput.value = "";
     await fetchMessages();
+    await fetchUsersPresence();
   } catch (error) {
     setStatus(`Send error: ${error.message}`);
   }
 }
 
-function logout() {
+async function notifyServerLogout() {
+  if (!state.serverUrl || !state.token) {
+    return;
+  }
+
+  try {
+    await fetch(`${state.serverUrl}/api/auth/logout`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+      },
+    });
+  } catch (_) {
+    // Ignore network errors during logout cleanup.
+  }
+}
+
+async function logout(notifyServer = true) {
+  if (notifyServer) {
+    await notifyServerLogout();
+  }
+
   stopPolling();
   state.serverUrl = "";
   state.token = "";
   state.username = "";
   clearSession();
+  messagesContainer.innerHTML = "";
+  usersListContainer.innerHTML = "";
   showLogin();
 }
 
-function tryRestoreSession() {
+async function tryRestoreSession() {
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) {
     showLogin();
@@ -228,7 +335,8 @@ function tryRestoreSession() {
       state.token = parsed.token;
       state.username = parsed.username;
       showChat();
-      fetchMessages();
+      await fetchMessages();
+      await fetchUsersPresence();
       startPolling();
       setStatus("Session restored");
       return;
@@ -242,7 +350,12 @@ function tryRestoreSession() {
 
 loginForm.addEventListener("submit", login);
 sendForm.addEventListener("submit", sendMessage);
-refreshBtn.addEventListener("click", fetchMessages);
-logoutBtn.addEventListener("click", logout);
+refreshBtn.addEventListener("click", async () => {
+  await fetchMessages();
+  await fetchUsersPresence();
+});
+logoutBtn.addEventListener("click", () => {
+  void logout(true);
+});
 
-tryRestoreSession();
+void tryRestoreSession();

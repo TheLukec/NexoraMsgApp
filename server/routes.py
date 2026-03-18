@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from auth import create_access_token, get_current_admin, get_current_user, hash_password, verify_password
 from database import get_db
 from models import Message, User
+from presence import get_online_user_ids, mark_active, mark_inactive
 from schemas import (
     LoginRequest,
     MessageCreate,
@@ -15,6 +16,7 @@ from schemas import (
     StatsOut,
     TokenResponse,
     UserCreate,
+    UserPresenceOut,
     UserPublic,
 )
 
@@ -37,6 +39,9 @@ def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
+    # Mark user as online as soon as login succeeds.
+    mark_active(user.id)
+
     access_token = create_access_token({"sub": user.username, "is_admin": user.is_admin})
     return TokenResponse(
         access_token=access_token,
@@ -45,8 +50,15 @@ def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
     )
 
 
+@router.post("/auth/logout")
+def logout(current_user: CurrentUser) -> dict:
+    mark_inactive(current_user.id)
+    return {"detail": "Logged out"}
+
+
 @router.get("/me", response_model=UserPublic)
 def me(current_user: CurrentUser) -> UserPublic:
+    mark_active(current_user.id)
     return UserPublic.model_validate(current_user)
 
 
@@ -56,7 +68,9 @@ def get_messages(
     db: DbSession,
     limit: int = Query(default=100, ge=1, le=200),
 ) -> list[MessageOut]:
-    del current_user
+    # Polling this endpoint also acts as an online heartbeat.
+    mark_active(current_user.id)
+
     rows = db.execute(
         select(Message, User.username)
         .join(User, Message.user_id == User.id)
@@ -77,6 +91,8 @@ def get_messages(
 
 @router.post("/messages", response_model=MessageOut)
 def send_message(payload: MessageCreate, current_user: CurrentUser, db: DbSession) -> MessageOut:
+    mark_active(current_user.id)
+
     content = payload.content.strip()
     if not content:
         raise HTTPException(status_code=400, detail="Message content cannot be empty")
@@ -94,16 +110,31 @@ def send_message(payload: MessageCreate, current_user: CurrentUser, db: DbSessio
     )
 
 
+@router.get("/users/presence", response_model=list[UserPresenceOut])
+def get_users_presence(current_user: CurrentUser, db: DbSession) -> list[UserPresenceOut]:
+    # Any authenticated request refreshes online status for that user.
+    mark_active(current_user.id)
+
+    users = db.scalars(select(User).order_by(User.username.asc())).all()
+    online_user_ids = get_online_user_ids()
+
+    return [
+        UserPresenceOut(username=user.username, online=user.id in online_user_ids)
+        for user in users
+    ]
+
+
 @router.get("/users", response_model=list[UserPublic])
 def list_users(current_admin: CurrentAdmin, db: DbSession) -> list[UserPublic]:
-    del current_admin
+    mark_active(current_admin.id)
     users = db.scalars(select(User).order_by(User.created_at.asc())).all()
     return [UserPublic.model_validate(user) for user in users]
 
 
 @router.post("/users", response_model=UserPublic)
 def create_user(payload: UserCreate, current_admin: CurrentAdmin, db: DbSession) -> UserPublic:
-    del current_admin
+    mark_active(current_admin.id)
+
     username = payload.username.strip()
     existing_user = db.scalar(select(User).where(User.username == username))
     if existing_user:
@@ -122,6 +153,8 @@ def create_user(payload: UserCreate, current_admin: CurrentAdmin, db: DbSession)
 
 @router.delete("/users/{user_id}")
 def delete_user(user_id: int, current_admin: CurrentAdmin, db: DbSession) -> dict:
+    mark_active(current_admin.id)
+
     if user_id == current_admin.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own admin account")
 
@@ -129,6 +162,7 @@ def delete_user(user_id: int, current_admin: CurrentAdmin, db: DbSession) -> dic
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
+    mark_inactive(user.id)
     db.delete(user)
     db.commit()
     return {"detail": f"User '{user.username}' deleted"}
@@ -136,7 +170,8 @@ def delete_user(user_id: int, current_admin: CurrentAdmin, db: DbSession) -> dic
 
 @router.get("/stats", response_model=StatsOut)
 def get_stats(current_admin: CurrentAdmin, db: DbSession) -> StatsOut:
-    del current_admin
+    mark_active(current_admin.id)
+
     users_total = db.scalar(select(func.count(User.id))) or 0
     messages_total = db.scalar(select(func.count(Message.id))) or 0
     return StatsOut(users_total=users_total, messages_total=messages_total)
