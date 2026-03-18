@@ -36,6 +36,16 @@
     </section>
 
     <section class="panel">
+      <h2>File Upload Limit</h2>
+      <p class="muted">Current max upload size: <strong>{{ max_upload_mb }} MB</strong></p>
+      <form method="post" action="/admin/settings/upload-limit" class="grid-form compact-form">
+        <label for="max_upload_mb">Max upload size (MB)</label>
+        <input id="max_upload_mb" name="max_upload_mb" type="number" required min="1" max="2048" value="{{ max_upload_mb }}" />
+        <button type="submit">Save</button>
+      </form>
+    </section>
+
+    <section class="panel">
       <h2>Create User</h2>
       <form method="post" action="/admin/users/create" class="grid-form">
         <label for="new_username">Username</label>
@@ -106,6 +116,7 @@
               <th>ID</th>
               <th>User</th>
               <th>Message</th>
+              <th>Attachment</th>
               <th>Created</th>
               <th>Action</th>
             </tr>
@@ -115,7 +126,24 @@
               <tr>
                 <td>{{ message.id }}</td>
                 <td>{{ username }}</td>
-                <td class="message-cell">{{ message.content }}</td>
+                <td class="message-cell">
+                  {% if message.content %}
+                    {{ message.content }}
+                  {% else %}
+                    <span class="muted">(file only message)</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if message.file_original_name %}
+                    <div class="attachment-meta">
+                      <div class="attachment-name">{{ message.file_original_name }}</div>
+                      <div class="muted">{{ message.file_size }} bytes</div>
+                      <a class="button-link small" href="/admin/uploads/{{ message.id }}">Download</a>
+                    </div>
+                  {% else %}
+                    <span class="muted">No file</span>
+                  {% endif %}
+                </td>
                 <td>{{ message.created_at }}</td>
                 <td>
                   <form method="post" action="/admin/messages/{{ message.id }}/delete">
@@ -125,7 +153,7 @@
               </tr>
             {% else %}
               <tr>
-                <td colspan="5" class="muted">No messages available.</td>
+                <td colspan="6" class="muted">No messages available.</td>
               </tr>
             {% endfor %}
           </tbody>

@@ -10,10 +10,12 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from admin import router as admin_router
 from auth import hash_password
+from chat_settings import ensure_upload_limit_setting
 from config import settings
 from database import SessionLocal, init_db
 from models import User
 from routes import router as api_router
+from upload_service import ensure_uploads_dir
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -22,16 +24,17 @@ def create_default_admin() -> None:
     db = SessionLocal()
     try:
         admin_user = db.scalar(select(User).where(User.username == settings.default_admin_username))
-        if admin_user:
-            return
+        if not admin_user:
+            admin_user = User(
+                username=settings.default_admin_username,
+                password_hash=hash_password(settings.default_admin_password),
+                is_admin=True,
+            )
+            db.add(admin_user)
+            db.commit()
 
-        admin_user = User(
-            username=settings.default_admin_username,
-            password_hash=hash_password(settings.default_admin_password),
-            is_admin=True,
-        )
-        db.add(admin_user)
-        db.commit()
+        # Ensure persistent server setting exists for upload size limit.
+        ensure_upload_limit_setting(db)
     finally:
         db.close()
 
@@ -39,6 +42,7 @@ def create_default_admin() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    ensure_uploads_dir()
     create_default_admin()
     yield
 
@@ -77,3 +81,4 @@ def root() -> dict:
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host=settings.host, port=settings.port, reload=False)
+

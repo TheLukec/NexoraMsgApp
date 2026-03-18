@@ -8,17 +8,27 @@ const serverUrlInput = document.getElementById("server_url");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
 const messageInput = document.getElementById("message-input");
+const fileInput = document.getElementById("file-input");
+const selectedFileLabel = document.getElementById("selected-file");
+
 const messagesContainer = document.getElementById("messages");
 const usersListContainer = document.getElementById("users-list");
 const statusText = document.getElementById("status");
 const connectedUser = document.getElementById("connected-user");
 const connectedServer = document.getElementById("connected-server");
+const sidebarUsersSection = document.getElementById("sidebar-users-section");
+const sidebarChangePasswordSection = document.getElementById("sidebar-change-password-section");
 
 const changePasswordForm = document.getElementById("change-password-form");
 const currentPasswordInput = document.getElementById("current-password");
 const newPasswordInput = document.getElementById("new-password");
 const confirmPasswordInput = document.getElementById("confirm-password");
 const passwordFeedback = document.getElementById("password-feedback");
+
+const replyPreview = document.getElementById("reply-preview");
+const replyPreviewAuthor = document.getElementById("reply-preview-author");
+const replyPreviewText = document.getElementById("reply-preview-text");
+const cancelReplyBtn = document.getElementById("cancel-reply-btn");
 
 const SESSION_KEY = "nexora_session";
 const state = {
@@ -27,6 +37,7 @@ const state = {
   username: "",
   messagePollTimer: null,
   usersPollTimer: null,
+  currentReply: null,
 };
 
 function setStatus(message) {
@@ -64,6 +75,40 @@ function normalizeServerUrl(value) {
   return url.replace(/\/+$/, "");
 }
 
+function summarizeReplyText(content, maxLength = 120) {
+  const compact = String(content ?? "").replace(/\s+/g, " ").trim();
+  if (compact.length <= maxLength) {
+    return compact;
+  }
+  return `${compact.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function formatFileSize(sizeBytes) {
+  if (!Number.isFinite(sizeBytes) || sizeBytes < 0) {
+    return "Unknown size";
+  }
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function parseErrorDetail(raw, fallback) {
+  if (!raw) {
+    return fallback;
+  }
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (typeof raw.detail === "string") {
+    return raw.detail;
+  }
+  return fallback;
+}
+
 function saveSession() {
   localStorage.setItem(
     SESSION_KEY,
@@ -96,16 +141,147 @@ function startPolling() {
   state.usersPollTimer = setInterval(fetchUsersPresence, 8000);
 }
 
+function updateSidebarAuthSections(isLoggedIn) {
+  if (sidebarUsersSection) {
+    sidebarUsersSection.classList.toggle("hidden", !isLoggedIn);
+  }
+  if (sidebarChangePasswordSection) {
+    sidebarChangePasswordSection.classList.toggle("hidden", !isLoggedIn);
+  }
+}
+
+function updateSelectedFileLabel() {
+  if (!selectedFileLabel) {
+    return;
+  }
+
+  const selectedFile = fileInput?.files?.[0] ?? null;
+  if (!selectedFile) {
+    selectedFileLabel.textContent = "No file selected";
+    return;
+  }
+
+  selectedFileLabel.textContent = `${selectedFile.name} (${formatFileSize(selectedFile.size)})`;
+}
+
+function clearSelectedFile() {
+  if (fileInput) {
+    fileInput.value = "";
+  }
+  updateSelectedFileLabel();
+}
+
+function setReplyTarget(message) {
+  if (!message || !Number.isInteger(message.id)) {
+    return;
+  }
+
+  const previewText = (message.content || "").trim() || (message.file_name ? `[Attachment] ${message.file_name}` : "");
+
+  state.currentReply = {
+    id: message.id,
+    username: message.username,
+    content: previewText,
+  };
+
+  if (replyPreview && replyPreviewAuthor && replyPreviewText) {
+    replyPreviewAuthor.textContent = message.username;
+    replyPreviewText.textContent = `"${summarizeReplyText(previewText || "(empty message)", 160)}"`;
+    replyPreview.classList.remove("hidden");
+  }
+
+  messageInput.focus();
+}
+
+function clearReplyTarget() {
+  state.currentReply = null;
+
+  if (replyPreview) {
+    replyPreview.classList.add("hidden");
+  }
+  if (replyPreviewAuthor) {
+    replyPreviewAuthor.textContent = "-";
+  }
+  if (replyPreviewText) {
+    replyPreviewText.textContent = "-";
+  }
+}
+
 function showLogin() {
+  updateSidebarAuthSections(false);
+  clearReplyTarget();
+  clearSelectedFile();
   loginPanel.classList.remove("hidden");
   chatPanel.classList.add("hidden");
 }
 
 function showChat() {
+  updateSidebarAuthSections(true);
   loginPanel.classList.add("hidden");
   chatPanel.classList.remove("hidden");
   connectedUser.textContent = state.username;
   connectedServer.textContent = state.serverUrl;
+}
+
+async function downloadMessageFile(message) {
+  try {
+    const response = await fetch(`${state.serverUrl}/api/uploads/${message.id}`, {
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      setStatus("Session expired. Please login again.");
+      await logout(false);
+      return;
+    }
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setStatus(parseErrorDetail(data, "Cannot download file"));
+      return;
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = blobUrl;
+    anchor.download = message.file_name || "download";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(blobUrl);
+
+    setStatus(`Downloaded ${message.file_name || "file"}`);
+  } catch (error) {
+    setStatus(`Download error: ${error.message}`);
+  }
+}
+
+function createAttachmentElement(message) {
+  if (!message.file_name) {
+    return null;
+  }
+
+  const attachment = document.createElement("div");
+  attachment.className = "message-attachment";
+
+  const meta = document.createElement("div");
+  meta.className = "message-attachment-meta";
+  meta.textContent = `${message.file_name} (${formatFileSize(message.file_size)})`;
+
+  const downloadBtn = document.createElement("button");
+  downloadBtn.type = "button";
+  downloadBtn.className = "message-download";
+  downloadBtn.textContent = "Download";
+  downloadBtn.addEventListener("click", () => {
+    void downloadMessageFile(message);
+  });
+
+  attachment.appendChild(meta);
+  attachment.appendChild(downloadBtn);
+  return attachment;
 }
 
 function messageToElement(message) {
@@ -119,8 +295,19 @@ function messageToElement(message) {
   meta.className = "message-meta";
   const created = new Date(message.created_at).toLocaleString();
   meta.textContent = `${message.username} | ${created}`;
-
   header.appendChild(meta);
+
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
+
+  const replyButton = document.createElement("button");
+  replyButton.type = "button";
+  replyButton.className = "message-reply";
+  replyButton.textContent = "Reply";
+  replyButton.addEventListener("click", () => {
+    setReplyTarget(message);
+  });
+  actions.appendChild(replyButton);
 
   // Delete is shown only for messages created by the currently logged-in user.
   if (message.username === state.username) {
@@ -131,14 +318,44 @@ function messageToElement(message) {
     deleteButton.addEventListener("click", () => {
       void deleteMessage(message.id);
     });
-    header.appendChild(deleteButton);
+    actions.appendChild(deleteButton);
   }
 
-  const body = document.createElement("div");
-  body.textContent = message.content;
-
+  header.appendChild(actions);
   wrapper.appendChild(header);
-  wrapper.appendChild(body);
+
+  if (message.reply_to) {
+    const replyContext = document.createElement("div");
+    replyContext.className = message.reply_to.deleted
+      ? "message-reply-context deleted"
+      : "message-reply-context";
+
+    replyContext.textContent = message.reply_to.deleted
+      ? `-> Reply to deleted message (${message.reply_to.author})`
+      : `-> Reply to ${message.reply_to.author}: "${summarizeReplyText(message.reply_to.content, 90)}"`;
+
+    wrapper.appendChild(replyContext);
+  }
+
+  const text = (message.content || "").trim();
+  if (text) {
+    const body = document.createElement("div");
+    body.textContent = text;
+    wrapper.appendChild(body);
+  }
+
+  const attachment = createAttachmentElement(message);
+  if (attachment) {
+    wrapper.appendChild(attachment);
+  }
+
+  if (!text && !attachment) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "(empty message)";
+    wrapper.appendChild(empty);
+  }
+
   return wrapper;
 }
 
@@ -274,7 +491,7 @@ async function login(event) {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      setStatus(data.detail || "Login failed");
+      setStatus(parseErrorDetail(data, "Login failed"));
       return;
     }
 
@@ -286,6 +503,8 @@ async function login(event) {
     saveSession();
     showChat();
     clearPasswordFeedback();
+    clearReplyTarget();
+    clearSelectedFile();
     setStatus("Login successful");
 
     await fetchMessages();
@@ -298,19 +517,33 @@ async function login(event) {
 
 async function sendMessage(event) {
   event.preventDefault();
+
   const content = messageInput.value.trim();
-  if (!content) {
+  const selectedFile = fileInput?.files?.[0] ?? null;
+
+  if (!content && !selectedFile) {
+    setStatus("Write a message or attach a file.");
     return;
+  }
+
+  const formData = new FormData();
+  formData.append("content", content);
+
+  if (state.currentReply && Number.isInteger(state.currentReply.id)) {
+    formData.append("parent_message_id", String(state.currentReply.id));
+  }
+
+  if (selectedFile) {
+    formData.append("file", selectedFile);
   }
 
   try {
     const response = await fetch(`${state.serverUrl}/api/messages`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${state.token}`,
       },
-      body: JSON.stringify({ content }),
+      body: formData,
     });
 
     if (response.status === 401) {
@@ -321,17 +554,20 @@ async function sendMessage(event) {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      setStatus(data.detail || "Failed to send message");
+      setStatus(parseErrorDetail(data, "Failed to send message"));
       return;
     }
 
     messageInput.value = "";
+    clearSelectedFile();
+    clearReplyTarget();
     await fetchMessages();
     await fetchUsersPresence();
   } catch (error) {
     setStatus(`Send error: ${error.message}`);
   }
 }
+
 async function deleteMessage(messageId) {
   try {
     const response = await fetch(`${state.serverUrl}/api/messages/${messageId}`, {
@@ -349,11 +585,11 @@ async function deleteMessage(messageId) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setStatus(data.detail || "Failed to delete message");
+      setStatus(parseErrorDetail(data, "Failed to delete message"));
       return;
     }
 
-    setStatus(data.detail || "Message deleted");
+    setStatus(parseErrorDetail(data, "Message deleted"));
     await fetchMessages();
     await fetchUsersPresence();
   } catch (error) {
@@ -404,12 +640,12 @@ async function changePassword(event) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setPasswordFeedback(data.detail || "Password change failed.", true);
+      setPasswordFeedback(parseErrorDetail(data, "Password change failed."), true);
       return;
     }
 
     changePasswordForm.reset();
-    setPasswordFeedback(data.detail || "Password changed successfully", false);
+    setPasswordFeedback(parseErrorDetail(data, "Password changed successfully"), false);
   } catch (error) {
     setPasswordFeedback(`Password change error: ${error.message}`, true);
   }
@@ -448,6 +684,8 @@ async function logout(notifyServer = true) {
     changePasswordForm.reset();
   }
   clearPasswordFeedback();
+  clearReplyTarget();
+  clearSelectedFile();
   showLogin();
 }
 
@@ -466,6 +704,8 @@ async function tryRestoreSession() {
       state.username = parsed.username;
       showChat();
       clearPasswordFeedback();
+      clearReplyTarget();
+      clearSelectedFile();
       await fetchMessages();
       await fetchUsersPresence();
       startPolling();
@@ -481,6 +721,12 @@ async function tryRestoreSession() {
 
 loginForm.addEventListener("submit", login);
 sendForm.addEventListener("submit", sendMessage);
+if (fileInput) {
+  fileInput.addEventListener("change", updateSelectedFileLabel);
+}
+if (cancelReplyBtn) {
+  cancelReplyBtn.addEventListener("click", clearReplyTarget);
+}
 if (changePasswordForm) {
   changePasswordForm.addEventListener("submit", changePassword);
 }
@@ -492,5 +738,5 @@ logoutBtn.addEventListener("click", () => {
   void logout(true);
 });
 
+updateSelectedFileLabel();
 void tryRestoreSession();
-

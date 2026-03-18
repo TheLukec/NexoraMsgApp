@@ -1,19 +1,21 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from auth import create_access_token, get_current_admin, get_current_user, hash_password, verify_password
+from chat_settings import get_upload_limit_bytes
 from database import get_db
 from models import Message, User
 from presence import get_online_user_ids, mark_active, mark_inactive
 from schemas import (
     AdminChangePasswordRequest,
     LoginRequest,
-    MessageCreate,
     MessageOut,
+    ReplyToOut,
     StatsOut,
     TokenResponse,
     UserChangePasswordRequest,
@@ -21,12 +23,75 @@ from schemas import (
     UserPresenceOut,
     UserPublic,
 )
+from upload_service import delete_stored_file, resolve_upload_path, save_upload_file
 
 router = APIRouter(prefix="/api", tags=["API"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 CurrentAdmin = Annotated[User, Depends(get_current_admin)]
+
+REPLY_PREVIEW_MAX_CHARS = 120
+DELETED_REPLY_TEXT = "Reply to deleted message"
+
+
+def _short_reply_text(content: str) -> str:
+    compact = " ".join(content.split())
+    if len(compact) <= REPLY_PREVIEW_MAX_CHARS:
+        return compact
+    return f"{compact[: REPLY_PREVIEW_MAX_CHARS - 3].rstrip()}..."
+
+
+def _reply_source_text(message: Message) -> str:
+    content = (message.content or "").strip()
+    if content:
+        return content
+    if message.file_original_name:
+        return f"[Attachment] {message.file_original_name}"
+    return ""
+
+
+def _build_reply_preview(message: Message) -> ReplyToOut | None:
+    """Build reply context for UI, including deleted-parent fallback."""
+    if message.parent_message is not None:
+        parent = message.parent_message
+        parent_author = parent.author.username if parent.author is not None else (message.reply_to_username or "Unknown")
+        preview_content = _reply_source_text(parent) or DELETED_REPLY_TEXT
+        return ReplyToOut(
+            id=parent.id,
+            author=parent_author,
+            content=_short_reply_text(preview_content),
+            deleted=False,
+        )
+
+    if message.parent_message_id is not None or message.reply_to_username or message.reply_to_content:
+        return ReplyToOut(
+            id=message.parent_message_id,
+            author=message.reply_to_username or "Unknown",
+            content=message.reply_to_content or DELETED_REPLY_TEXT,
+            deleted=True,
+        )
+
+    return None
+
+
+def _to_message_out(message: Message) -> MessageOut:
+    author_name = message.author.username if message.author is not None else "Unknown"
+    has_file = bool(message.file_storage_name)
+
+    return MessageOut(
+        id=message.id,
+        content=message.content,
+        created_at=message.created_at,
+        username=author_name,
+        parent_message_id=message.parent_message_id,
+        reply_to=_build_reply_preview(message),
+        file_name=message.file_original_name,
+        file_path=message.file_storage_name,
+        file_size=message.file_size,
+        mime_type=message.file_mime_type,
+        file_download_path=(f"/api/uploads/{message.id}" if has_file else None),
+    )
 
 
 @router.get("/health")
@@ -110,42 +175,92 @@ def get_messages(
     # Polling this endpoint also acts as an online heartbeat.
     mark_active(current_user.id)
 
-    rows = db.execute(
-        select(Message, User.username)
-        .join(User, Message.user_id == User.id)
+    messages = db.scalars(
+        select(Message)
+        .options(
+            selectinload(Message.author),
+            selectinload(Message.parent_message).selectinload(Message.author),
+        )
         .order_by(Message.created_at.desc())
         .limit(limit)
     ).all()
-    rows.reverse()
-    return [
-        MessageOut(
-            id=message.id,
-            content=message.content,
-            created_at=message.created_at,
-            username=username,
-        )
-        for message, username in rows
-    ]
+
+    messages.reverse()
+    return [_to_message_out(message) for message in messages]
 
 
 @router.post("/messages", response_model=MessageOut)
-def send_message(payload: MessageCreate, current_user: CurrentUser, db: DbSession) -> MessageOut:
+async def send_message(
+    current_user: CurrentUser,
+    db: DbSession,
+    content: str = Form(default=""),
+    parent_message_id: int | None = Form(default=None),
+    file: UploadFile | None = File(default=None),
+) -> MessageOut:
     mark_active(current_user.id)
 
-    content = payload.content.strip()
-    if not content:
-        raise HTTPException(status_code=400, detail="Message content cannot be empty")
+    message_content = (content or "").strip()
+    if len(message_content) > 1000:
+        raise HTTPException(status_code=400, detail="Message content is too long")
 
-    message = Message(user_id=current_user.id, content=content)
+    upload_file = file if file and (file.filename or "").strip() else None
+
+    if not message_content and upload_file is None:
+        raise HTTPException(status_code=400, detail="Message content or file is required")
+
+    parent_message: Message | None = None
+    reply_to_username: str | None = None
+    reply_to_content: str | None = None
+
+    if parent_message_id is not None:
+        parent_message = db.get(Message, parent_message_id)
+        if parent_message is None:
+            raise HTTPException(status_code=404, detail="Reply target message not found")
+
+        # Keep a small snapshot so UI can still show context if target gets deleted later.
+        reply_to_username = parent_message.author.username if parent_message.author is not None else "Unknown"
+        reply_to_content = _short_reply_text(_reply_source_text(parent_message) or DELETED_REPLY_TEXT)
+
+    saved_upload = None
+    if upload_file is not None:
+        max_upload_bytes = get_upload_limit_bytes(db)
+        # Upload size is validated on the server for security.
+        saved_upload = await save_upload_file(upload_file, max_upload_bytes)
+
+    message = Message(
+        user_id=current_user.id,
+        content=message_content,
+        parent_message_id=(parent_message.id if parent_message is not None else None),
+        reply_to_username=reply_to_username,
+        reply_to_content=reply_to_content,
+        file_original_name=(saved_upload.original_name if saved_upload else None),
+        file_storage_name=(saved_upload.storage_name if saved_upload else None),
+        file_size=(saved_upload.size if saved_upload else None),
+        file_mime_type=(saved_upload.mime_type if saved_upload else None),
+    )
     db.add(message)
     db.commit()
     db.refresh(message)
 
-    return MessageOut(
-        id=message.id,
-        content=message.content,
-        created_at=message.created_at,
-        username=current_user.username,
+    return _to_message_out(message)
+
+
+@router.get("/uploads/{message_id}")
+def download_message_file(message_id: int, current_user: CurrentUser, db: DbSession):
+    mark_active(current_user.id)
+
+    message = db.get(Message, message_id)
+    if message is None or not message.file_storage_name:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_path = resolve_upload_path(message.file_storage_name)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(
+        path=file_path,
+        filename=message.file_original_name or file_path.name,
+        media_type=message.file_mime_type or "application/octet-stream",
     )
 
 
@@ -161,8 +276,13 @@ def delete_message(message_id: int, current_user: CurrentUser, db: DbSession) ->
     if message.user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    stored_file_name = message.file_storage_name
+
+    # Reply messages stay in chat; DB sets their parent_message_id to NULL on parent delete.
     db.delete(message)
     db.commit()
+
+    delete_stored_file(stored_file_name)
     return {"detail": "Message deleted"}
 
 
@@ -231,3 +351,4 @@ def get_stats(current_admin: CurrentAdmin, db: DbSession) -> StatsOut:
     users_total = db.scalar(select(func.count(User.id))) or 0
     messages_total = db.scalar(select(func.count(Message.id))) or 0
     return StatsOut(users_total=users_total, messages_total=messages_total)
+

@@ -2,15 +2,17 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from auth import hash_password, verify_password
+from chat_settings import get_upload_limit_mb, set_upload_limit_mb
 from database import get_db
 from models import Message, User
 from presence import mark_inactive
+from upload_service import delete_stored_file, resolve_upload_path
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -81,6 +83,9 @@ def admin_messages(request: Request, db: Session = Depends(get_db)):
             "username": username,
             "content": message.content,
             "created_at": message.created_at.isoformat(),
+            "file_name": message.file_original_name,
+            "file_size": message.file_size,
+            "mime_type": message.file_mime_type,
         }
         for message, username in rows
     ]
@@ -97,6 +102,7 @@ def admin_dashboard(request: Request, db: Session = Depends(get_db)):
     users_total = len(users)
     messages_total = db.scalar(select(func.count(Message.id))) or 0
     latest_message_at = db.scalar(select(Message.created_at).order_by(Message.created_at.desc()).limit(1))
+    max_upload_mb = get_upload_limit_mb(db)
     notice = request.query_params.get("notice", "")
 
     return templates.TemplateResponse(
@@ -110,8 +116,32 @@ def admin_dashboard(request: Request, db: Session = Depends(get_db)):
             "users_total": users_total,
             "messages_total": messages_total,
             "latest_message_at": latest_message_at,
+            "max_upload_mb": max_upload_mb,
         },
     )
+
+
+@router.post("/admin/settings/upload-limit")
+def admin_set_upload_limit(
+    request: Request,
+    max_upload_mb: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    admin_user = _load_admin_user(request, db)
+    if admin_user is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    raw = (max_upload_mb or "").strip()
+    if not raw:
+        return RedirectResponse(url="/admin?notice=" + quote("Upload limit is required"), status_code=303)
+
+    try:
+        parsed = int(raw)
+        set_upload_limit_mb(db, parsed)
+    except ValueError as error:
+        return RedirectResponse(url="/admin?notice=" + quote(str(error)), status_code=303)
+
+    return RedirectResponse(url="/admin?notice=" + quote(f"Upload limit updated to {parsed} MB"), status_code=303)
 
 
 @router.post("/admin/users/create")
@@ -180,6 +210,27 @@ def admin_change_password(
     return RedirectResponse(url="/admin?notice=" + quote(f"Password changed for '{username}'"), status_code=303)
 
 
+@router.get("/admin/uploads/{message_id}")
+def admin_download_message_file(message_id: int, request: Request, db: Session = Depends(get_db)):
+    admin_user = _load_admin_user(request, db)
+    if admin_user is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    message = db.get(Message, message_id)
+    if message is None or not message.file_storage_name:
+        return RedirectResponse(url="/admin?notice=" + quote("File not found"), status_code=303)
+
+    file_path = resolve_upload_path(message.file_storage_name)
+    if not file_path.exists():
+        return RedirectResponse(url="/admin?notice=" + quote("File not found"), status_code=303)
+
+    return FileResponse(
+        path=file_path,
+        filename=message.file_original_name or file_path.name,
+        media_type=message.file_mime_type or "application/octet-stream",
+    )
+
+
 @router.post("/admin/messages/{message_id}/delete")
 def admin_delete_message(message_id: int, request: Request, db: Session = Depends(get_db)):
     admin_user = _load_admin_user(request, db)
@@ -190,8 +241,11 @@ def admin_delete_message(message_id: int, request: Request, db: Session = Depend
     if message is None:
         return RedirectResponse(url="/admin?notice=" + quote("Message not found"), status_code=303)
 
+    stored_file_name = message.file_storage_name
     db.delete(message)
     db.commit()
+
+    delete_stored_file(stored_file_name)
     return RedirectResponse(url="/admin?notice=" + quote("Message deleted"), status_code=303)
 
 
@@ -211,3 +265,4 @@ def admin_delete_user(user_id: int, request: Request, db: Session = Depends(get_
     db.delete(user)
     db.commit()
     return RedirectResponse(url="/admin?notice=" + quote(f"User '{user.username}' deleted"), status_code=303)
+

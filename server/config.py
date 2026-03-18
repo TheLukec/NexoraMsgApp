@@ -17,6 +17,9 @@ class Settings:
     default_admin_username: str = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
     default_admin_password: str = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
 
+    uploads_dir: str = os.getenv("UPLOADS_DIR", "uploads")
+    default_max_upload_mb: int = int(os.getenv("DEFAULT_MAX_UPLOAD_MB", "10"))
+
     def post_init(self):
         if not self.database_url:
             raise ValueError("DATABASE_URL is not set in environment variables")

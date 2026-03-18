@@ -8,7 +8,6 @@
 </head>
 <body>
 
-
   <input type="checkbox" id="sidebar-toggle" hidden />
 
   <!-- MATRIX BACKGROUND -->
@@ -113,14 +112,14 @@
 
     <!-- ACTIVE USERS -->
       
-      <section class="sidebar-section">
+      <section id="sidebar-users-section" class="sidebar-section hidden">
         <h3>Users</h3>
         <div id="users-list" class="user-list-container">
           <p class="muted">Loading users...</p>
         </div>
       </section>
 
-      <section class="sidebar-section">
+      <section id="sidebar-change-password-section" class="sidebar-section hidden">
         <h3>Change Password</h3>
         <form id="change-password-form" class="password-form">
           <input id="current-password" type="password" placeholder="Current password" required minlength="6" />
@@ -171,13 +170,26 @@
           <div id="messages" class="messages">
             <!-- Placeholder Chat Message -->
             <div class="message">
-              <div class="message-meta">System • Now</div>
+              <div class="message-meta">System | Now</div>
               Welcome to Nexora Chat! Select a theme from the sidebar.
             </div>
           </div>
+          <div id="reply-preview" class="reply-preview hidden">
+            <div class="reply-preview-body">
+              <p class="reply-preview-title">Replying to <strong id="reply-preview-author">-</strong></p>
+              <p id="reply-preview-text" class="reply-preview-text">-</p>
+            </div>
+            <button id="cancel-reply-btn" type="button" class="reply-cancel-btn">Cancel</button>
+          </div>
 
           <form id="send-form" class="send-form">
-            <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" required />
+            <div class="send-fields">
+              <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" />
+              <div class="send-file-row">
+                <input id="file-input" type="file" />
+                <span id="selected-file" class="muted file-selected">No file selected</span>
+              </div>
+            </div>
             <button type="submit">Send</button>
           </form>
         </section>
@@ -190,3 +202,4 @@
   <script src="../static/app.js"></script>
 </body>
 </html>
+

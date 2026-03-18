@@ -190,3 +190,25 @@ td {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.compact-form {
+  max-width: 360px;
+}
+
+.button-link.small {
+  display: inline-block;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.attachment-meta {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.attachment-name {
+  font-weight: 600;
+  word-break: break-word;
+}

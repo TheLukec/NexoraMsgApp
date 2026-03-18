@@ -45,7 +45,15 @@ class TokenResponse(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    content: str = Field(min_length=1, max_length=1000)
+    content: str = Field(default="", max_length=1000)
+    parent_message_id: int | None = Field(default=None, ge=1)
+
+
+class ReplyToOut(BaseModel):
+    id: int | None
+    author: str
+    content: str
+    deleted: bool = False
 
 
 class MessageOut(BaseModel):
@@ -53,6 +61,14 @@ class MessageOut(BaseModel):
     content: str
     created_at: datetime
     username: str
+    parent_message_id: int | None = None
+    reply_to: ReplyToOut | None = None
+
+    file_name: str | None = None
+    file_path: str | None = None
+    file_size: int | None = None
+    mime_type: str | None = None
+    file_download_path: str | None = None
 
 
 class StatsOut(BaseModel):
