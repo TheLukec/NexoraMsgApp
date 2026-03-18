@@ -2,14 +2,15 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from auth import verify_password
+from auth import hash_password, verify_password
 from database import get_db
 from models import Message, User
+from presence import mark_inactive
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -26,6 +27,15 @@ def _load_admin_user(request: Request, db: Session) -> User | None:
         request.session.clear()
         return None
     return admin_user
+
+
+def _message_rows(db: Session, limit: int = 300):
+    return db.execute(
+        select(Message, User.username)
+        .join(User, Message.user_id == User.id)
+        .order_by(Message.created_at.desc())
+        .limit(limit)
+    ).all()
 
 
 @router.get("/admin/login")
@@ -58,6 +68,24 @@ def admin_logout(request: Request):
     return RedirectResponse(url="/admin/login", status_code=303)
 
 
+@router.get("/admin/messages")
+def admin_messages(request: Request, db: Session = Depends(get_db)):
+    admin_user = _load_admin_user(request, db)
+    if admin_user is None:
+        return JSONResponse(status_code=401, content={"detail": "Admin login required"})
+
+    rows = _message_rows(db)
+    return [
+        {
+            "id": message.id,
+            "username": username,
+            "content": message.content,
+            "created_at": message.created_at.isoformat(),
+        }
+        for message, username in rows
+    ]
+
+
 @router.get("/admin")
 def admin_dashboard(request: Request, db: Session = Depends(get_db)):
     admin_user = _load_admin_user(request, db)
@@ -65,6 +93,7 @@ def admin_dashboard(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/admin/login", status_code=303)
 
     users = db.scalars(select(User).order_by(User.id.asc())).all()
+    messages = _message_rows(db)
     users_total = len(users)
     messages_total = db.scalar(select(func.count(Message.id))) or 0
     latest_message_at = db.scalar(select(Message.created_at).order_by(Message.created_at.desc()).limit(1))
@@ -77,6 +106,7 @@ def admin_dashboard(request: Request, db: Session = Depends(get_db)):
             "notice": notice,
             "admin_user": admin_user,
             "users": users,
+            "messages": messages,
             "users_total": users_total,
             "messages_total": messages_total,
             "latest_message_at": latest_message_at,
@@ -108,8 +138,6 @@ def admin_create_user(
     if existing_user:
         return RedirectResponse(url="/admin?notice=" + quote("Username already exists"), status_code=303)
 
-    from auth import hash_password
-
     new_user = User(
         username=username,
         password_hash=hash_password(password),
@@ -119,6 +147,52 @@ def admin_create_user(
     db.commit()
 
     return RedirectResponse(url="/admin?notice=" + quote(f"User '{username}' created"), status_code=303)
+
+
+@router.post("/admin/change-password")
+def admin_change_password(
+    request: Request,
+    username: str = Form(...),
+    new_password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    admin_user = _load_admin_user(request, db)
+    if admin_user is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    username = username.strip()
+    new_password = new_password.strip()
+
+    if len(new_password) < 6:
+        return RedirectResponse(url="/admin?notice=" + quote("New password must be at least 6 characters"), status_code=303)
+
+    user = db.scalar(select(User).where(User.username == username))
+    if user is None:
+        return RedirectResponse(url="/admin?notice=" + quote("User not found"), status_code=303)
+
+    # Password is never stored in plain text.
+    user.password_hash = hash_password(new_password)
+    db.add(user)
+    db.commit()
+
+    mark_inactive(user.id)
+
+    return RedirectResponse(url="/admin?notice=" + quote(f"Password changed for '{username}'"), status_code=303)
+
+
+@router.post("/admin/messages/{message_id}/delete")
+def admin_delete_message(message_id: int, request: Request, db: Session = Depends(get_db)):
+    admin_user = _load_admin_user(request, db)
+    if admin_user is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    message = db.get(Message, message_id)
+    if message is None:
+        return RedirectResponse(url="/admin?notice=" + quote("Message not found"), status_code=303)
+
+    db.delete(message)
+    db.commit()
+    return RedirectResponse(url="/admin?notice=" + quote("Message deleted"), status_code=303)
 
 
 @router.post("/admin/users/{user_id}/delete")

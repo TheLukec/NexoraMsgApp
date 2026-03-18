@@ -14,6 +14,12 @@ const statusText = document.getElementById("status");
 const connectedUser = document.getElementById("connected-user");
 const connectedServer = document.getElementById("connected-server");
 
+const changePasswordForm = document.getElementById("change-password-form");
+const currentPasswordInput = document.getElementById("current-password");
+const newPasswordInput = document.getElementById("new-password");
+const confirmPasswordInput = document.getElementById("confirm-password");
+const passwordFeedback = document.getElementById("password-feedback");
+
 const SESSION_KEY = "nexora_session";
 const state = {
   serverUrl: "",
@@ -25,6 +31,26 @@ const state = {
 
 function setStatus(message) {
   statusText.textContent = message;
+}
+
+function setPasswordFeedback(message, isError = false) {
+  if (!passwordFeedback) {
+    return;
+  }
+
+  passwordFeedback.textContent = message;
+  passwordFeedback.classList.remove("password-feedback-success", "password-feedback-error", "muted");
+  passwordFeedback.classList.add(isError ? "password-feedback-error" : "password-feedback-success");
+}
+
+function clearPasswordFeedback() {
+  if (!passwordFeedback) {
+    return;
+  }
+
+  passwordFeedback.textContent = "";
+  passwordFeedback.classList.remove("password-feedback-success", "password-feedback-error");
+  passwordFeedback.classList.add("muted");
 }
 
 function normalizeServerUrl(value) {
@@ -86,15 +112,32 @@ function messageToElement(message) {
   const wrapper = document.createElement("div");
   wrapper.className = "message";
 
+  const header = document.createElement("div");
+  header.className = "message-header";
+
   const meta = document.createElement("div");
   meta.className = "message-meta";
   const created = new Date(message.created_at).toLocaleString();
   meta.textContent = `${message.username} | ${created}`;
 
+  header.appendChild(meta);
+
+  // Delete is shown only for messages created by the currently logged-in user.
+  if (message.username === state.username) {
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "message-delete";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => {
+      void deleteMessage(message.id);
+    });
+    header.appendChild(deleteButton);
+  }
+
   const body = document.createElement("div");
   body.textContent = message.content;
 
-  wrapper.appendChild(meta);
+  wrapper.appendChild(header);
   wrapper.appendChild(body);
   return wrapper;
 }
@@ -242,6 +285,7 @@ async function login(event) {
 
     saveSession();
     showChat();
+    clearPasswordFeedback();
     setStatus("Login successful");
 
     await fetchMessages();
@@ -288,6 +332,88 @@ async function sendMessage(event) {
     setStatus(`Send error: ${error.message}`);
   }
 }
+async function deleteMessage(messageId) {
+  try {
+    const response = await fetch(`${state.serverUrl}/api/messages/${messageId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      setStatus("Session expired. Please login again.");
+      await logout(false);
+      return;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setStatus(data.detail || "Failed to delete message");
+      return;
+    }
+
+    setStatus(data.detail || "Message deleted");
+    await fetchMessages();
+    await fetchUsersPresence();
+  } catch (error) {
+    setStatus(`Delete error: ${error.message}`);
+  }
+}
+
+async function changePassword(event) {
+  event.preventDefault();
+
+  if (!state.serverUrl || !state.token) {
+    setPasswordFeedback("You must be logged in.", true);
+    return;
+  }
+
+  const currentPassword = currentPasswordInput.value;
+  const newPassword = newPasswordInput.value;
+  const confirmPassword = confirmPasswordInput.value;
+
+  if (newPassword.length < 6) {
+    setPasswordFeedback("New password must be at least 6 characters.", true);
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    setPasswordFeedback("New password and confirm password do not match.", true);
+    return;
+  }
+
+  try {
+    const response = await fetch(`${state.serverUrl}/api/user/change-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${state.token}`,
+      },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+
+    if (response.status === 401) {
+      setStatus("Session expired. Please login again.");
+      await logout(false);
+      return;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setPasswordFeedback(data.detail || "Password change failed.", true);
+      return;
+    }
+
+    changePasswordForm.reset();
+    setPasswordFeedback(data.detail || "Password changed successfully", false);
+  } catch (error) {
+    setPasswordFeedback(`Password change error: ${error.message}`, true);
+  }
+}
 
 async function notifyServerLogout() {
   if (!state.serverUrl || !state.token) {
@@ -318,6 +444,10 @@ async function logout(notifyServer = true) {
   clearSession();
   messagesContainer.innerHTML = "";
   usersListContainer.innerHTML = "";
+  if (changePasswordForm) {
+    changePasswordForm.reset();
+  }
+  clearPasswordFeedback();
   showLogin();
 }
 
@@ -335,6 +465,7 @@ async function tryRestoreSession() {
       state.token = parsed.token;
       state.username = parsed.username;
       showChat();
+      clearPasswordFeedback();
       await fetchMessages();
       await fetchUsersPresence();
       startPolling();
@@ -350,6 +481,9 @@ async function tryRestoreSession() {
 
 loginForm.addEventListener("submit", login);
 sendForm.addEventListener("submit", sendMessage);
+if (changePasswordForm) {
+  changePasswordForm.addEventListener("submit", changePassword);
+}
 refreshBtn.addEventListener("click", async () => {
   await fetchMessages();
   await fetchUsersPresence();
@@ -359,3 +493,4 @@ logoutBtn.addEventListener("click", () => {
 });
 
 void tryRestoreSession();
+

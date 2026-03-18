@@ -10,11 +10,13 @@ from database import get_db
 from models import Message, User
 from presence import get_online_user_ids, mark_active, mark_inactive
 from schemas import (
+    AdminChangePasswordRequest,
     LoginRequest,
     MessageCreate,
     MessageOut,
     StatsOut,
     TokenResponse,
+    UserChangePasswordRequest,
     UserCreate,
     UserPresenceOut,
     UserPublic,
@@ -60,6 +62,43 @@ def logout(current_user: CurrentUser) -> dict:
 def me(current_user: CurrentUser) -> UserPublic:
     mark_active(current_user.id)
     return UserPublic.model_validate(current_user)
+
+
+@router.post("/user/change-password")
+def change_own_password(payload: UserChangePasswordRequest, current_user: CurrentUser, db: DbSession) -> dict:
+    mark_active(current_user.id)
+
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Wrong current password")
+
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different")
+
+    # Password is always stored as a bcrypt hash via passlib.
+    current_user.password_hash = hash_password(payload.new_password)
+    db.add(current_user)
+    db.commit()
+
+    return {"detail": "Password changed successfully"}
+
+
+@router.post("/admin/change-password")
+def admin_change_password(payload: AdminChangePasswordRequest, current_admin: CurrentAdmin, db: DbSession) -> dict:
+    mark_active(current_admin.id)
+
+    username = payload.username.strip()
+    user = db.scalar(select(User).where(User.username == username))
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password_hash = hash_password(payload.new_password)
+    db.add(user)
+    db.commit()
+
+    # Optional security signal: changed user is considered offline until next valid request.
+    mark_inactive(user.id)
+
+    return {"detail": f"Password changed for '{user.username}'"}
 
 
 @router.get("/messages", response_model=list[MessageOut])
@@ -108,6 +147,23 @@ def send_message(payload: MessageCreate, current_user: CurrentUser, db: DbSessio
         created_at=message.created_at,
         username=current_user.username,
     )
+
+
+@router.delete("/messages/{message_id}")
+def delete_message(message_id: int, current_user: CurrentUser, db: DbSession) -> dict:
+    mark_active(current_user.id)
+
+    message = db.get(Message, message_id)
+    if message is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # Permission check: only message author or admin can delete this message.
+    if message.user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    db.delete(message)
+    db.commit()
+    return {"detail": "Message deleted"}
 
 
 @router.get("/users/presence", response_model=list[UserPresenceOut])

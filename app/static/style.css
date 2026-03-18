@@ -579,3 +579,45 @@ body:has(#theme-stars:checked) button:not(.danger) {
 @keyframes aurora-drift { 0% { background-position: 0% 0%, 0% 0%, 0% 0%; filter: hue-rotate(0deg) brightness(1); } 50% { background-position: -10% -5%, 5% 10%, 0% 15%; filter: hue-rotate(30deg) brightness(1.2); } 100% { background-position: 5% 10%, -10% -5%, 15% 0%; filter: hue-rotate(60deg) brightness(1); } }
 @keyframes grid-shift { 0% { transform: translate(0, 0); } 100% { transform: translate(-50%, -50%); } }
 @keyframes aurora-pulse { 0% { opacity: 0.8; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.05); } 100% { opacity: 0.8; transform: scale(1); } }
+/* ===============================
+   CHANGE PASSWORD (USER)
+=============================== */
+.password-form {
+  display: grid;
+  gap: 8px;
+}
+
+.password-form input {
+  margin-top: 0;
+}
+
+.password-form button {
+  margin-top: 4px;
+}
+
+.password-feedback-success {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.password-feedback-error {
+  color: #f87171;
+  font-weight: 600;
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.message-delete {
+  width: auto;
+  margin-top: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+  background: var(--danger);
+}

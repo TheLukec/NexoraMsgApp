@@ -14,6 +14,16 @@ class UserCreate(BaseModel):
     is_admin: bool = False
 
 
+class UserChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+class AdminChangePasswordRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=50)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

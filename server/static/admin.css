@@ -161,3 +161,32 @@ td {
   background: #fee2e2;
   border-color: #fecaca;
 }
+
+.inline-actions {
+  display: grid;
+  gap: 8px;
+  min-width: 210px;
+}
+
+.inline-password-form {
+  display: grid;
+  gap: 6px;
+}
+
+.inline-password-form input {
+  margin-top: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.inline-password-form button {
+  margin-top: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.message-cell {
+  max-width: 400px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
