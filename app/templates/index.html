@@ -4,58 +4,178 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nexora Chat App</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="../static/style.css" />
 </head>
 <body>
-  <main class="container">
-    <section id="login-panel" class="card">
-      <h1>Nexora Msg App</h1>
-      <p>Connect to your server and sign in.</p>
 
-      <form id="login-form">
-        <label for="server_url">Server URL/IP</label>
-        <input id="server_url" name="server_url" type="text" placeholder="http://127.0.0.1:8000" required />
 
-        <label for="username">Username</label>
-        <input id="username" name="username" type="text" required />
+  <input type="checkbox" id="sidebar-toggle" hidden />
 
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password" required />
-
-        <button type="submit">Login</button>
-      </form>
-    </section>
-
-    <section id="chat-panel" class="card hidden chat-layout">
-      <div class="chat-main">
-        <header class="chat-header">
-          <div>
-            <strong id="connected-user">Unknown user</strong>
-            <div class="muted">Connected to <span id="connected-server">-</span></div>
-          </div>
-          <div class="actions">
-            <button id="refresh-btn" type="button">Refresh</button>
-            <button id="logout-btn" type="button" class="danger">Logout</button>
-          </div>
-        </header>
-
-        <div id="messages" class="messages"></div>
-
-        <form id="send-form" class="send-form">
-          <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" required />
-          <button type="submit">Send</button>
-        </form>
+  <!-- MATRIX BACKGROUND -->
+  <div id="bg-matrix" class="bg-layer">
+    <div class="matrix-container">
+      <div class="matrix-pattern">
+        <div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div>
       </div>
+      <div class="matrix-pattern">
+        <div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div>
+      </div>
+      <div class="matrix-pattern">
+        <div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div>
+      </div>
+      <div class="matrix-pattern">
+        <div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div><div class="matrix-column"></div>
+      </div>
+    </div>
+  </div>
 
-      <aside class="users-sidebar" aria-label="Users">
-        <h2>Users</h2>
-        <div id="users-list" class="users-list"></div>
-      </aside>
-    </section>
+  <!-- CUBES BACKGROUND -->
+  <div id="bg-cubes" class="bg-layer">
+    <div class="cubes-container"></div>
+  </div>
 
-    <p id="status" class="status">Ready</p>
+  <!-- STARS BACKGROUND -->
+  <div id="bg-stars" class="bg-layer">
+    <div class="uiverse-midnight-sky">
+      <div class="sky-canvas">
+        <div class="stars stars-1"></div>
+        <div class="stars stars-2"></div>
+        <div class="stars stars-3"></div>
+        <div class="meteor m1"></div>
+        <div class="meteor m2"></div>
+        <div class="meteor m3"></div>
+        <div class="moon"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RGB BACKGROUND -->
+  <div id="bg-rgb" class="bg-layer">
+    <div class="rgb-container"></div>
+  </div>
+
+  <!-- AURORA BACKGROUND -->
+  <div id="bg-aurora" class="bg-layer">
+    <div class="aurora-container"></div>
+  </div>
+
+
+  <!-- MAIN APP UI -->
+
+  <main class="app-layout">
+    
+    <!-- OPEN SIDEBAR BUTTON -->
+    <label for="sidebar-toggle" class="sidebar-open-btn" title="Open Menu">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"></polyline>
+      </svg>
+    </label>
+    
+    <!-- SIDEBAR -->
+    <aside class="sidebar card">
+      <!-- CLOSE SIDEBAR BUTTON -->
+      <label for="sidebar-toggle" class="sidebar-close-btn" title="Close Menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </label>
+
+      <section class="sidebar-section">
+        <h3>Themes</h3>
+        <div class="radio-container">
+          <input checked id="theme-default" name="theme" type="radio" value="default" />
+          <label for="theme-default">Default</label>
+         
+          <input id="theme-dark" name="theme" type="radio" value="dark" />
+          <label for="theme-dark">Dark Mode</label>
+
+          <input id="theme-matrix" name="theme" type="radio" value="matrix" />
+          <label for="theme-matrix">Matrix</label>
+
+          <input id="theme-cubes" name="theme" type="radio" value="cubes" />
+          <label for="theme-cubes">Cubes</label>
+
+          <input id="theme-stars" name="theme" type="radio" value="stars" />
+          <label for="theme-stars">Stars</label>
+
+          <input id="theme-rgb" name="theme" type="radio" value="rgb" />
+          <label for="theme-rgb">RGB</label>
+
+          <input id="theme-aurora" name="theme" type="radio" value="aurora" />
+          <label for="theme-aurora">Aurora</label>
+
+          <div class="glider-container">
+            <div class="glider"></div>
+          </div>
+        </div>
+      </section>
+
+    <!-- ACTIVE USERS -->
+      
+      <section class="sidebar-section">
+        <h3>Users</h3>
+        <div id="users-list" class="user-list-container">
+          <p class="muted">Loading users...</p>
+        </div>
+      </section>
+    </aside>
+
+    <!-- CONTENT AREA -->
+    <div class="content-area">
+      <div class="container">
+        
+        <!-- LOGIN PANEL -->
+        <section id="login-panel" class="card">
+          <h1>Nexora Msg App</h1>
+          <p class="muted">Connect to your server and sign in.</p>
+
+          <form id="login-form">
+            <label for="server_url">Server URL/IP</label>
+            <input id="server_url" name="server_url" type="text" placeholder="http://127.0.0.1:8000" required />
+
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" required />
+
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" required />
+
+            <button type="submit">Login</button>
+          </form>
+        </section>
+
+        <!-- CHAT PANEL -->
+        <section id="chat-panel" class="card hidden">
+          <header class="chat-header">
+            <div>
+              <strong id="connected-user">Unknown user</strong>
+              <div class="muted">Connected to <span id="connected-server">-</span></div>
+            </div>
+            <div class="actions">
+              <button id="refresh-btn" type="button">Refresh</button>
+              <button id="logout-btn" type="button" class="danger">Logout</button>
+            </div>
+          </header>
+
+          <div id="messages" class="messages">
+            <!-- Placeholder Chat Message -->
+            <div class="message">
+              <div class="message-meta">System • Now</div>
+              Welcome to Nexora Chat! Select a theme from the sidebar.
+            </div>
+          </div>
+
+          <form id="send-form" class="send-form">
+            <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" required />
+            <button type="submit">Send</button>
+          </form>
+        </section>
+
+        <p id="status" class="status">Ready</p>
+      </div>
+    </div>
   </main>
 
-  <script src="/static/app.js"></script>
+  <script src="../static/app.js"></script>
 </body>
 </html>
