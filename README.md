@@ -15,7 +15,21 @@ Both `server` and `app` are designed for **Python 3.12.10**.
 
 ```text
 NexoraMsgApp/
+|-- .gitattributes
+|-- LICENSE
 |-- README.md
+|-- README/
+|   |-- README.md
+|   |-- project_overview.md
+|   |-- app_explained.md
+|   |-- server_explained.md
+|   |-- database_explained.md
+|   |-- admin_panel_explained.md
+|   |-- technology_decisions.md
+|   |-- file_by_file_explanation.md
+|   |-- setup_guide.md
+|   |-- usage_guide.md
+|   `-- program_flow_step_by_step.md
 |-- app/
 |   |-- main.py
 |   |-- config.py
@@ -39,7 +53,7 @@ NexoraMsgApp/
     |-- requirements.txt
     |-- Dockerfile
     |-- docker-compose.yml
-    |-- .env.example
+    |-- .env
     |-- initdb/
     |   `-- 01-init.sql
     |-- templates/
