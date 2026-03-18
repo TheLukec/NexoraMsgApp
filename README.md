@@ -1,4 +1,4 @@
-# Nexora v6.7 - Simple Group Chat
+# Nexora Msg App - Simple Group Chat
 
 Simple modular project with two clearly separated parts:
 
@@ -14,7 +14,7 @@ Both `server` and `app` are designed for **Python 3.12.10**.
 ## Project Structure
 
 ```text
-Nexora_v6.7/
+NexoraMsgApp/
 |-- README.md
 |-- app/
 |   |-- main.py
