@@ -184,13 +184,28 @@
 
           <form id="send-form" class="send-form">
             <div class="send-fields">
-              <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" />
-              <div class="send-file-row">
-                <input id="file-input" type="file" />
+              <div class="send-main-row">
+                <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" />
+                <input id="file-input" type="file" class="hidden-file-input" />
+                <button
+                  id="file-picker-btn"
+                  type="button"
+                  class="file-picker-btn"
+                  title="Attach file"
+                  aria-label="Attach file"
+                >
+                  +
+                </button>
+                <button id="send-btn" type="submit" class="send-btn">Send</button>
+              </div>
+              <div class="send-meta-row">
                 <span id="selected-file" class="muted file-selected">No file selected</span>
               </div>
+              <div id="upload-progress" class="upload-progress hidden" aria-hidden="true">
+                <div id="upload-progress-bar" class="upload-progress-bar"></div>
+              </div>
+              <p id="upload-progress-text" class="upload-progress-text hidden" aria-live="polite"></p>
             </div>
-            <button type="submit">Send</button>
           </form>
         </section>
 
@@ -202,4 +217,3 @@
   <script src="../static/app.js"></script>
 </body>
 </html>
-

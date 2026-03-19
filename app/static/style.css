@@ -438,8 +438,6 @@ body:has(#sidebar-toggle:checked) .sidebar-open-btn {
   color: var(--muted); font-size: 12px; font-weight: 600; margin-bottom: 6px;
 }
 
-.send-form { display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-top: 15px; }
-.send-form button { width: 120px; margin-top: 8px; }
 
 .status {
   text-align: center; margin-top: 20px;
@@ -462,8 +460,6 @@ body:has(#sidebar-toggle:checked) .sidebar-open-btn {
   .chat-header { flex-direction: column; align-items: flex-start; }
   .actions { width: 100%; margin-top: 10px; }
   .actions button { flex: 1; }
-  .send-form { grid-template-columns: 1fr; }
-  .send-form button { width: 100%; }
 }
 
 
@@ -710,7 +706,10 @@ body:has(#theme-stars:checked) button:not(.danger) {
    FILE UPLOAD UI
 =============================== */
 .send-form {
-  align-items: end;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 15px;
 }
 
 .send-fields {
@@ -719,22 +718,62 @@ body:has(#theme-stars:checked) button:not(.danger) {
   min-width: 0;
 }
 
-.send-file-row {
+.send-main-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
 }
 
-#file-input {
-  width: auto;
-  max-width: 100%;
+.send-main-row #message-input {
   margin-top: 0;
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.file-picker-btn,
+.send-btn {
+  margin-top: 0;
+  height: 44px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-picker-btn {
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
   border-radius: 10px;
-  border: 1px solid var(--line);
-  padding: 8px 10px;
-  background: var(--msg-bg);
-  color: var(--ink);
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.send-btn {
+  width: auto;
+  min-width: 96px;
+  padding: 0 16px;
+  border-radius: 10px;
+}
+
+.file-picker-btn:disabled,
+.send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.send-meta-row {
+  display: flex;
+  align-items: center;
+  min-height: 18px;
 }
 
 .file-selected {
@@ -743,6 +782,41 @@ body:has(#theme-stars:checked) button:not(.danger) {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+}
+
+.upload-progress {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(107, 114, 128, 0.22);
+  overflow: hidden;
+}
+
+.upload-progress-bar {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), #34d399);
+  transition: width 0.2s ease;
+}
+
+.upload-progress-bar.indeterminate {
+  width: 35%;
+  animation: upload-indeterminate 1s ease-in-out infinite;
+}
+
+.upload-progress-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@keyframes upload-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
 }
 
 .message-attachment {
@@ -772,13 +846,20 @@ body:has(#theme-stars:checked) button:not(.danger) {
 }
 
 @media (max-width: 820px) {
-  .send-file-row {
-    flex-direction: column;
-    align-items: flex-start;
+  .send-main-row {
+    gap: 6px;
   }
 
-  #file-input {
-    width: 100%;
+  .file-picker-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+  }
+
+  .send-btn {
+    min-width: 84px;
+    height: 40px;
+    padding: 0 12px;
   }
 
   .message-attachment {

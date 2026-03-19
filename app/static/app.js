@@ -4,12 +4,19 @@ const loginForm = document.getElementById("login-form");
 const sendForm = document.getElementById("send-form");
 const refreshBtn = document.getElementById("refresh-btn");
 const logoutBtn = document.getElementById("logout-btn");
+const sendBtn = document.getElementById("send-btn");
+
 const serverUrlInput = document.getElementById("server_url");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
 const messageInput = document.getElementById("message-input");
+
 const fileInput = document.getElementById("file-input");
+const filePickerBtn = document.getElementById("file-picker-btn");
 const selectedFileLabel = document.getElementById("selected-file");
+const uploadProgress = document.getElementById("upload-progress");
+const uploadProgressBar = document.getElementById("upload-progress-bar");
+const uploadProgressText = document.getElementById("upload-progress-text");
 
 const messagesContainer = document.getElementById("messages");
 const usersListContainer = document.getElementById("users-list");
@@ -38,6 +45,7 @@ const state = {
   messagePollTimer: null,
   usersPollTimer: null,
   currentReply: null,
+  isUploading: false,
 };
 
 function setStatus(message) {
@@ -150,6 +158,17 @@ function updateSidebarAuthSections(isLoggedIn) {
   }
 }
 
+function setUploadingState(isUploading) {
+  state.isUploading = isUploading;
+
+  if (sendBtn) {
+    sendBtn.disabled = isUploading;
+  }
+  if (filePickerBtn) {
+    filePickerBtn.disabled = isUploading;
+  }
+}
+
 function updateSelectedFileLabel() {
   if (!selectedFileLabel) {
     return;
@@ -161,7 +180,7 @@ function updateSelectedFileLabel() {
     return;
   }
 
-  selectedFileLabel.textContent = `${selectedFile.name} (${formatFileSize(selectedFile.size)})`;
+  selectedFileLabel.textContent = `Attached: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`;
 }
 
 function clearSelectedFile() {
@@ -169,6 +188,50 @@ function clearSelectedFile() {
     fileInput.value = "";
   }
   updateSelectedFileLabel();
+}
+
+function showUploadProgress() {
+  if (uploadProgress) {
+    uploadProgress.classList.remove("hidden");
+  }
+  if (uploadProgressText) {
+    uploadProgressText.classList.remove("hidden");
+  }
+}
+
+function hideUploadProgress() {
+  if (uploadProgress) {
+    uploadProgress.classList.add("hidden");
+  }
+  if (uploadProgressText) {
+    uploadProgressText.classList.add("hidden");
+  }
+}
+
+function setUploadProgress(percent, hasRealPercent) {
+  showUploadProgress();
+
+  if (uploadProgressBar) {
+    uploadProgressBar.classList.toggle("indeterminate", !hasRealPercent);
+    uploadProgressBar.style.width = hasRealPercent ? `${percent}%` : "35%";
+  }
+
+  if (uploadProgressText) {
+    uploadProgressText.textContent = hasRealPercent
+      ? `Uploading... ${percent}%`
+      : "Uploading...";
+  }
+}
+
+function resetUploadProgress() {
+  if (uploadProgressBar) {
+    uploadProgressBar.classList.remove("indeterminate");
+    uploadProgressBar.style.width = "0%";
+  }
+  if (uploadProgressText) {
+    uploadProgressText.textContent = "";
+  }
+  hideUploadProgress();
 }
 
 function setReplyTarget(message) {
@@ -211,6 +274,8 @@ function showLogin() {
   updateSidebarAuthSections(false);
   clearReplyTarget();
   clearSelectedFile();
+  resetUploadProgress();
+  setUploadingState(false);
   loginPanel.classList.remove("hidden");
   chatPanel.classList.add("hidden");
 }
@@ -221,6 +286,72 @@ function showChat() {
   chatPanel.classList.remove("hidden");
   connectedUser.textContent = state.username;
   connectedServer.textContent = state.serverUrl;
+}
+
+function uploadMessageWithProgress(formData) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${state.serverUrl}/api/messages`);
+    xhr.setRequestHeader("Authorization", `Bearer ${state.token}`);
+    xhr.timeout = 45000;
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+        setUploadProgress(percent, true);
+      } else {
+        setUploadProgress(0, false);
+      }
+    };
+
+    xhr.onload = () => {
+      let data = {};
+      if (xhr.responseText) {
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch (_) {
+          data = { detail: xhr.responseText };
+        }
+      }
+
+      resolve({
+        status: xhr.status,
+        ok: xhr.status >= 200 && xhr.status < 300,
+        data,
+      });
+    };
+
+    xhr.onerror = () => {
+      reject(new Error("Network error during upload"));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error("Upload timed out"));
+    };
+
+    xhr.onabort = () => {
+      reject(new Error("Upload was cancelled"));
+    };
+
+    xhr.send(formData);
+  });
+}
+
+async function sendMessageWithoutFile(formData) {
+  const response = await fetch(`${state.serverUrl}/api/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${state.token}`,
+    },
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => ({}));
+  return {
+    status: response.status,
+    ok: response.ok,
+    data,
+  };
 }
 
 async function downloadMessageFile(message) {
@@ -518,6 +649,10 @@ async function login(event) {
 async function sendMessage(event) {
   event.preventDefault();
 
+  if (state.isUploading) {
+    return;
+  }
+
   const content = messageInput.value.trim();
   const selectedFile = fileInput?.files?.[0] ?? null;
 
@@ -526,36 +661,61 @@ async function sendMessage(event) {
     return;
   }
 
-  const formData = new FormData();
-  formData.append("content", content);
+  const buildFormData = () => {
+    const payload = new FormData();
+    payload.append("content", content);
 
-  if (state.currentReply && Number.isInteger(state.currentReply.id)) {
-    formData.append("parent_message_id", String(state.currentReply.id));
-  }
+    if (state.currentReply && Number.isInteger(state.currentReply.id)) {
+      payload.append("parent_message_id", String(state.currentReply.id));
+    }
 
-  if (selectedFile) {
-    formData.append("file", selectedFile);
+    if (selectedFile) {
+      payload.append("file", selectedFile);
+    }
+
+    return payload;
+  };
+
+  const hasFileUpload = Boolean(selectedFile);
+
+  setUploadingState(true);
+  if (hasFileUpload) {
+    setUploadProgress(0, true);
+  } else {
+    resetUploadProgress();
   }
 
   try {
-    const response = await fetch(`${state.serverUrl}/api/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: formData,
-    });
+    let result;
+    if (hasFileUpload) {
+      try {
+        result = await uploadMessageWithProgress(buildFormData());
+      } catch (_) {
+        // Fallback for environments where XHR upload may fail (status 0 / CORS / proxy),
+        // while regular fetch still works.
+        setUploadProgress(0, false);
+        if (uploadProgressText) {
+          uploadProgressText.textContent = "Retrying upload...";
+        }
+        result = await sendMessageWithoutFile(buildFormData());
+      }
+    } else {
+      result = await sendMessageWithoutFile(buildFormData());
+    }
 
-    if (response.status === 401) {
+    if (result.status === 401) {
       setStatus("Session expired. Please login again.");
       await logout(false);
       return;
     }
 
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      setStatus(parseErrorDetail(data, "Failed to send message"));
+    if (!result.ok) {
+      setStatus(parseErrorDetail(result.data, "Failed to send message"));
       return;
+    }
+
+    if (hasFileUpload) {
+      setUploadProgress(100, true);
     }
 
     messageInput.value = "";
@@ -563,8 +723,16 @@ async function sendMessage(event) {
     clearReplyTarget();
     await fetchMessages();
     await fetchUsersPresence();
+    setStatus("Message sent");
   } catch (error) {
     setStatus(`Send error: ${error.message}`);
+  } finally {
+    setUploadingState(false);
+    if (hasFileUpload) {
+      setTimeout(resetUploadProgress, 250);
+    } else {
+      resetUploadProgress();
+    }
   }
 }
 
@@ -686,6 +854,8 @@ async function logout(notifyServer = true) {
   clearPasswordFeedback();
   clearReplyTarget();
   clearSelectedFile();
+  resetUploadProgress();
+  setUploadingState(false);
   showLogin();
 }
 
@@ -706,6 +876,8 @@ async function tryRestoreSession() {
       clearPasswordFeedback();
       clearReplyTarget();
       clearSelectedFile();
+      resetUploadProgress();
+      setUploadingState(false);
       await fetchMessages();
       await fetchUsersPresence();
       startPolling();
@@ -721,8 +893,26 @@ async function tryRestoreSession() {
 
 loginForm.addEventListener("submit", login);
 sendForm.addEventListener("submit", sendMessage);
+
+if (filePickerBtn && fileInput) {
+  filePickerBtn.addEventListener("click", () => {
+    fileInput.click();
+  });
+}
 if (fileInput) {
   fileInput.addEventListener("change", updateSelectedFileLabel);
+}
+if (messageInput && sendForm) {
+  messageInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (typeof sendForm.requestSubmit === "function") {
+        sendForm.requestSubmit(sendBtn || undefined);
+      } else if (sendBtn) {
+        sendBtn.click();
+      }
+    }
+  });
 }
 if (cancelReplyBtn) {
   cancelReplyBtn.addEventListener("click", clearReplyTarget);
@@ -730,6 +920,7 @@ if (cancelReplyBtn) {
 if (changePasswordForm) {
   changePasswordForm.addEventListener("submit", changePassword);
 }
+
 refreshBtn.addEventListener("click", async () => {
   await fetchMessages();
   await fetchUsersPresence();
@@ -739,4 +930,7 @@ logoutBtn.addEventListener("click", () => {
 });
 
 updateSelectedFileLabel();
+resetUploadProgress();
+setUploadingState(false);
 void tryRestoreSession();
+

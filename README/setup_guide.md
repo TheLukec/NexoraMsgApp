@@ -60,6 +60,8 @@ Important variables:
 - `DEFAULT_ADMIN_USERNAME`: initial admin name.
 - `DEFAULT_ADMIN_PASSWORD`: initial admin password.
 - `CORS_ALLOW_ORIGINS`: allowed browser origins (`*` for development).
+- `UPLOADS_DIR`: upload storage path (in Docker compose it is set to `/app/uploads`).
+- `DEFAULT_MAX_UPLOAD_MB`: default upload size limit in MB.
 
 MySQL container variables:
 
@@ -90,6 +92,40 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+
+## Docker persistence for uploads
+
+`server/docker-compose.yml` defines two persistent volumes:
+
+- `mysql_data` for MySQL data
+- `chat_uploads` for uploaded files
+
+The server container mounts `chat_uploads` to `/app/uploads` and compose sets `UPLOADS_DIR=/app/uploads`.
+
+Check volume existence:
+
+```bash
+docker volume ls
+```
+
+Inspect uploads volume:
+
+```bash
+docker volume inspect chat_uploads
+```
+
+Backup uploaded files:
+
+```bash
+docker run --rm -v chat_uploads:/volume -v ${PWD}:/backup alpine sh -c "cd /volume && tar czf /backup/chat_uploads_backup.tar.gz ."
+```
+
+Restore uploaded files:
+
+```bash
+docker run --rm -v chat_uploads:/volume -v ${PWD}:/backup alpine sh -c "cd /volume && tar xzf /backup/chat_uploads_backup.tar.gz"
 ```
 
 ## Basic verification checks

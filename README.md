@@ -54,6 +54,7 @@ NexoraMsgApp/
     |-- Dockerfile
     |-- docker-compose.yml
     |-- .env
+    |-- .env.example
     |-- initdb/
     |   `-- 01-init.sql
     |-- templates/
@@ -87,6 +88,36 @@ NexoraMsgApp/
 3. Access:
    - API root: `http://localhost:8000/`
    - Admin panel: `http://localhost:8000/admin/login`
+
+## Docker Volumes (Persistent Data)
+
+- MySQL data is stored in volume `mysql_data`.
+- Uploaded chat files are stored in dedicated volume `chat_uploads` (mounted to `/app/uploads` in server container).
+- Server upload path is configured via environment variable `UPLOADS_DIR` (Docker compose sets it to `/app/uploads`).
+
+Check volumes:
+
+```bash
+docker volume ls
+```
+
+Inspect uploads volume:
+
+```bash
+docker volume inspect chat_uploads
+```
+
+Backup uploaded files:
+
+```bash
+docker run --rm -v chat_uploads:/volume -v ${PWD}:/backup alpine sh -c "cd /volume && tar czf /backup/chat_uploads_backup.tar.gz ."
+```
+
+Restore uploaded files:
+
+```bash
+docker run --rm -v chat_uploads:/volume -v ${PWD}:/backup alpine sh -c "cd /volume && tar xzf /backup/chat_uploads_backup.tar.gz"
+```
 
 Default admin credentials come from `.env`:
 - `DEFAULT_ADMIN_USERNAME=admin`

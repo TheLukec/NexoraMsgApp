@@ -13,6 +13,7 @@ services:
     ports:
       - "3306:3306"
     volumes:
+      # Persistent MySQL data volume
       - mysql_data:/var/lib/mysql
       - ./initdb:/docker-entrypoint-initdb.d
     healthcheck:
@@ -29,13 +30,19 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # Keep upload path central in config via env var.
+      UPLOADS_DIR: /app/uploads
     depends_on:
       mysql:
         condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
-      - ./uploads:/app/uploads
+      # Persistent uploaded files volume
+      - chat_uploads:/app/uploads
 
 volumes:
   mysql_data:
+  chat_uploads:
+    name: chat_uploads
