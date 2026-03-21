@@ -15,6 +15,7 @@ Both `server` and `app` are designed for **Python 3.12.10**.
 
 ```text
 NexoraMsgApp/
+|-- start.bat
 |-- .gitattributes
 |-- LICENSE
 |-- README.md
