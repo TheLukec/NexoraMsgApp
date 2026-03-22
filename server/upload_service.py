@@ -20,6 +20,7 @@ _INVALID_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._ -]")
 class SavedUpload:
     original_name: str
     storage_name: str
+    file_path: str
     size: int
     mime_type: str
 
@@ -74,11 +75,23 @@ def delete_stored_file(storage_name: str | None) -> None:
     except HTTPException:
         return
 
-    if path.exists():
+    try:
         path.unlink(missing_ok=True)
+    except OSError:
+        # Filesystem cleanup should never crash business logic.
+        return
 
 
-async def save_upload_file(upload_file: UploadFile, max_size_bytes: int) -> SavedUpload:
+def _upload_limit_error(max_size_bytes: int) -> HTTPException:
+    max_mb = max(1, max_size_bytes // (1024 * 1024))
+    return HTTPException(status_code=413, detail=f"Total upload size is too large. Limit is {max_mb} MB")
+
+
+async def _save_single_upload_file(
+    upload_file: UploadFile,
+    max_total_size_bytes: int,
+    current_total_bytes: int,
+) -> tuple[SavedUpload, int]:
     ensure_uploads_dir()
 
     original_name = sanitize_original_filename(upload_file.filename or "")
@@ -86,31 +99,74 @@ async def save_upload_file(upload_file: UploadFile, max_size_bytes: int) -> Save
     destination = resolve_upload_path(storage_name)
 
     file_size = 0
+    total_bytes = current_total_bytes
 
     try:
-        # Streaming write keeps memory usage low and enforces max size server-side.
+        # Streaming write keeps memory usage low and validates cumulative upload size server-side.
         with destination.open("wb") as target:
             while True:
                 chunk = await upload_file.read(1024 * 1024)
                 if not chunk:
                     break
 
-                file_size += len(chunk)
-                if file_size > max_size_bytes:
+                chunk_size = len(chunk)
+                file_size += chunk_size
+                total_bytes += chunk_size
+
+                if total_bytes > max_total_size_bytes:
                     target.close()
                     destination.unlink(missing_ok=True)
-                    max_mb = max(1, max_size_bytes // (1024 * 1024))
-                    raise HTTPException(status_code=413, detail=f"File is too large. Limit is {max_mb} MB")
+                    raise _upload_limit_error(max_total_size_bytes)
 
                 target.write(chunk)
     finally:
         await upload_file.close()
 
     mime_type = (upload_file.content_type or "application/octet-stream").strip() or "application/octet-stream"
-    return SavedUpload(
-        original_name=original_name,
-        storage_name=storage_name,
-        size=file_size,
-        mime_type=mime_type,
+    return (
+        SavedUpload(
+            original_name=original_name,
+            storage_name=storage_name,
+            file_path=storage_name,
+            size=file_size,
+            mime_type=mime_type,
+        ),
+        total_bytes,
     )
 
+
+async def save_upload_files(upload_files: list[UploadFile], max_total_size_bytes: int) -> list[SavedUpload]:
+    ensure_uploads_dir()
+
+    saved_uploads: list[SavedUpload] = []
+    total_bytes = 0
+
+    try:
+        for upload_file in upload_files:
+            if upload_file is None:
+                continue
+
+            if not (upload_file.filename or "").strip():
+                await upload_file.close()
+                continue
+
+            saved_upload, total_bytes = await _save_single_upload_file(
+                upload_file,
+                max_total_size_bytes=max_total_size_bytes,
+                current_total_bytes=total_bytes,
+            )
+            saved_uploads.append(saved_upload)
+    except Exception:
+        for saved_upload in saved_uploads:
+            delete_stored_file(saved_upload.storage_name)
+        raise
+
+    return saved_uploads
+
+
+async def save_upload_file(upload_file: UploadFile, max_size_bytes: int) -> SavedUpload:
+    """Backward-compatible single-file helper."""
+    saved_uploads = await save_upload_files([upload_file], max_size_bytes)
+    if not saved_uploads:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    return saved_uploads[0]

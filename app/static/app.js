@@ -6,7 +6,9 @@ const refreshBtn = document.getElementById("refresh-btn");
 const logoutBtn = document.getElementById("logout-btn");
 const sendBtn = document.getElementById("send-btn");
 
-const serverUrlInput = document.getElementById("server_url");
+const serverProtocolInput = document.getElementById("server_protocol");
+const serverHostInput = document.getElementById("server_host");
+const serverPortInput = document.getElementById("server_port");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
 const messageInput = document.getElementById("message-input");
@@ -14,6 +16,8 @@ const messageInput = document.getElementById("message-input");
 const fileInput = document.getElementById("file-input");
 const filePickerBtn = document.getElementById("file-picker-btn");
 const selectedFileLabel = document.getElementById("selected-file");
+const selectedFilesList = document.getElementById("selected-files-list");
+const uploadLimitText = document.getElementById("upload-limit");
 const uploadProgress = document.getElementById("upload-progress");
 const uploadProgressBar = document.getElementById("upload-progress-bar");
 const uploadProgressText = document.getElementById("upload-progress-text");
@@ -46,6 +50,11 @@ const state = {
   usersPollTimer: null,
   currentReply: null,
   isUploading: false,
+  uploadsEnabled: true,
+  maxUploadMb: null,
+  maxUploadBytes: null,
+  filesTooLarge: false,
+  selectedFiles: [],
 };
 
 function setStatus(message) {
@@ -72,15 +81,67 @@ function clearPasswordFeedback() {
   passwordFeedback.classList.add("muted");
 }
 
-function normalizeServerUrl(value) {
-  let url = value.trim();
-  if (!url) {
-    return "";
+const ALLOWED_SERVER_PROTOCOLS = new Set(["http://", "https://"]);
+
+function parseServerUrl(value) {
+  try {
+    return new URL(value);
+  } catch (_) {
+    return null;
   }
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    url = `http://${url}`;
+}
+
+function fillServerConnectionInputs(serverUrl) {
+  const parsed = parseServerUrl(serverUrl);
+
+  const protocol = parsed?.protocol === "http:" ? "http://" : "https://";
+  const host = parsed?.hostname ?? "";
+  const fallbackPort = protocol === "https://" ? "443" : "80";
+  const port = parsed?.port || fallbackPort;
+
+  if (serverProtocolInput) {
+    serverProtocolInput.value = protocol;
   }
-  return url.replace(/\/+$/, "");
+  if (serverHostInput) {
+    serverHostInput.value = host;
+  }
+  if (serverPortInput) {
+    serverPortInput.value = port;
+  }
+}
+
+function buildServerUrlFromInputs() {
+  const protocol = (serverProtocolInput?.value || "https://").trim().toLowerCase();
+  const rawHost = (serverHostInput?.value || "").trim();
+  const rawPort = String(serverPortInput?.value ?? "").trim();
+
+  if (!ALLOWED_SERVER_PROTOCOLS.has(protocol)) {
+    return { error: "Choose protocol http:// or https://." };
+  }
+
+  if (!rawHost) {
+    return { error: "Please enter domain or IP." };
+  }
+
+  let host = rawHost
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "");
+
+  // If the user accidentally pasted host:port, keep only host.
+  if (/^[^\[\]]+:\d+$/.test(host)) {
+    host = host.replace(/:\d+$/, "");
+  }
+
+  if (!host || /\s/.test(host) || host.includes("/")) {
+    return { error: "Domain/IP format is invalid." };
+  }
+
+  const port = Number.parseInt(rawPort, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { error: "Port must be a number between 1 and 65535." };
+  }
+
+  return { serverUrl: `${protocol}${host}:${port}` };
 }
 
 function summarizeReplyText(content, maxLength = 120) {
@@ -104,6 +165,55 @@ function formatFileSize(sizeBytes) {
   return `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function getSelectedFiles() {
+  return state.selectedFiles.filter((file) => (file?.name || "").trim());
+}
+
+function getFileIdentity(file) {
+  return [file.name, file.size, file.lastModified, file.type].join("::");
+}
+
+function mergeSelectedFiles(filesToAdd) {
+  if (!Array.isArray(filesToAdd) || filesToAdd.length === 0) {
+    return;
+  }
+
+  const seen = new Set(state.selectedFiles.map(getFileIdentity));
+  filesToAdd.forEach((file) => {
+    const key = getFileIdentity(file);
+    if (!seen.has(key)) {
+      state.selectedFiles.push(file);
+      seen.add(key);
+    }
+  });
+}
+
+function removeSelectedFile(indexToRemove) {
+  if (!Number.isInteger(indexToRemove) || indexToRemove < 0 || indexToRemove >= state.selectedFiles.length) {
+    return;
+  }
+
+  state.selectedFiles.splice(indexToRemove, 1);
+  updateSelectedFileLabel();
+}
+
+function getTotalFilesSize(files) {
+  return files.reduce((total, file) => total + (Number.isFinite(file.size) ? file.size : 0), 0);
+}
+
+function refreshSendAvailability() {
+  if (!sendBtn) {
+    return;
+  }
+
+  sendBtn.disabled = state.isUploading || state.filesTooLarge;
+}
+
+function setFilesTooLarge(isTooLarge) {
+  state.filesTooLarge = Boolean(isTooLarge);
+  refreshSendAvailability();
+}
+
 function parseErrorDetail(raw, fallback) {
   if (!raw) {
     return fallback;
@@ -117,6 +227,92 @@ function parseErrorDetail(raw, fallback) {
   return fallback;
 }
 
+
+function renderUploadLimitText() {
+  if (!uploadLimitText) {
+    return;
+  }
+
+  const limitDisplay = Number.isFinite(state.maxUploadMb) && state.maxUploadMb > 0
+    ? `${state.maxUploadMb} MB`
+    : "-";
+
+  if (state.uploadsEnabled) {
+    uploadLimitText.textContent = `Max upload size: ${limitDisplay}`;
+    return;
+  }
+
+  uploadLimitText.textContent = `File uploads are disabled by the server admin (limit: ${limitDisplay})`;
+}
+
+function setUploadLimitLabel(maxUploadMb) {
+  if (Number.isFinite(maxUploadMb) && maxUploadMb > 0) {
+    state.maxUploadMb = maxUploadMb;
+    state.maxUploadBytes = maxUploadMb * 1024 * 1024;
+  } else {
+    state.maxUploadMb = null;
+    state.maxUploadBytes = null;
+  }
+
+  renderUploadLimitText();
+  updateSelectedFileLabel();
+}
+
+function setUploadsEnabled(uploadsEnabled) {
+  const normalized = uploadsEnabled !== false;
+  const changed = state.uploadsEnabled !== normalized;
+  state.uploadsEnabled = normalized;
+
+  if (!state.uploadsEnabled && changed) {
+    clearSelectedFile();
+  }
+
+  if (fileInput) {
+    fileInput.disabled = !state.uploadsEnabled;
+  }
+  if (filePickerBtn) {
+    filePickerBtn.disabled = state.isUploading || !state.uploadsEnabled;
+  }
+
+  renderUploadLimitText();
+  updateSelectedFileLabel();
+}
+
+async function fetchUploadLimit() {
+  if (!state.serverUrl || !state.token) {
+    setUploadLimitLabel(null);
+    setUploadsEnabled(true);
+    return;
+  }
+
+  try {
+    const response = await fetch(`${state.serverUrl}/api/settings/upload-limit`, {
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      setStatus("Session expired. Please login again.");
+      await logout(false);
+      return;
+    }
+
+    if (!response.ok) {
+      setUploadLimitLabel(null);
+      return;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    const maxUploadMb = Number.parseInt(data.max_upload_mb, 10);
+    const uploadsEnabled = data.uploads_enabled !== false;
+
+    setUploadsEnabled(uploadsEnabled);
+    setUploadLimitLabel(maxUploadMb);
+  } catch (_) {
+    setUploadLimitLabel(null);
+  }
+}
 function saveSession() {
   localStorage.setItem(
     SESSION_KEY,
@@ -161,12 +357,15 @@ function updateSidebarAuthSections(isLoggedIn) {
 function setUploadingState(isUploading) {
   state.isUploading = isUploading;
 
-  if (sendBtn) {
-    sendBtn.disabled = isUploading;
+  if (fileInput) {
+    fileInput.disabled = !state.uploadsEnabled;
   }
   if (filePickerBtn) {
-    filePickerBtn.disabled = isUploading;
+    filePickerBtn.disabled = isUploading || !state.uploadsEnabled;
   }
+
+  refreshSendAvailability();
+  updateSelectedFileLabel();
 }
 
 function updateSelectedFileLabel() {
@@ -174,16 +373,69 @@ function updateSelectedFileLabel() {
     return;
   }
 
-  const selectedFile = fileInput?.files?.[0] ?? null;
-  if (!selectedFile) {
-    selectedFileLabel.textContent = "No file selected";
+  const selectedFiles = getSelectedFiles();
+
+  if (selectedFilesList) {
+    selectedFilesList.innerHTML = "";
+  }
+
+  if (!state.uploadsEnabled) {
+    selectedFileLabel.textContent = "File uploads are currently disabled by the server admin";
+    setFilesTooLarge(false);
     return;
   }
 
-  selectedFileLabel.textContent = `Attached: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`;
+  if (selectedFiles.length === 0) {
+    selectedFileLabel.textContent = "No file selected";
+    setFilesTooLarge(false);
+    return;
+  }
+
+  const totalSize = getTotalFilesSize(selectedFiles);
+  const uploadLimitDisplay = Number.isFinite(state.maxUploadMb) && state.maxUploadMb > 0
+    ? `${state.maxUploadMb} MB`
+    : "limit unknown";
+
+  selectedFileLabel.textContent = `${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"} selected (${formatFileSize(totalSize)} / ${uploadLimitDisplay})`;
+
+  if (selectedFilesList) {
+    selectedFiles.forEach((file, index) => {
+      const item = document.createElement("li");
+      item.className = "selected-file-item";
+
+      const itemMeta = document.createElement("span");
+      itemMeta.className = "selected-file-meta";
+      itemMeta.textContent = `${file.name} (${formatFileSize(file.size)})`;
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "selected-file-remove";
+      removeButton.textContent = "X";
+      removeButton.title = `Remove ${file.name}`;
+      removeButton.setAttribute("aria-label", `Remove ${file.name}`);
+      removeButton.disabled = state.isUploading;
+      removeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        removeSelectedFile(index);
+      });
+
+      item.appendChild(itemMeta);
+      item.appendChild(removeButton);
+      selectedFilesList.appendChild(item);
+    });
+  }
+
+  if (Number.isFinite(state.maxUploadBytes) && state.maxUploadBytes > 0 && totalSize > state.maxUploadBytes) {
+    setFilesTooLarge(true);
+    setStatus(`Selected files exceed upload limit (${formatFileSize(totalSize)} > ${state.maxUploadMb} MB).`);
+    return;
+  }
+
+  setFilesTooLarge(false);
 }
 
 function clearSelectedFile() {
+  state.selectedFiles = [];
   if (fileInput) {
     fileInput.value = "";
   }
@@ -239,7 +491,11 @@ function setReplyTarget(message) {
     return;
   }
 
-  const previewText = (message.content || "").trim() || (message.file_name ? `[Attachment] ${message.file_name}` : "");
+  const firstAttachment = Array.isArray(message.attachments) && message.attachments.length > 0
+    ? message.attachments[0]
+    : null;
+  const previewText = (message.content || "").trim()
+    || (firstAttachment?.file_name ? `[Attachment] ${firstAttachment.file_name}` : (message.file_name ? `[Attachment] ${message.file_name}` : ""));
 
   state.currentReply = {
     id: message.id,
@@ -273,7 +529,9 @@ function clearReplyTarget() {
 function showLogin() {
   updateSidebarAuthSections(false);
   clearReplyTarget();
+  setUploadsEnabled(true);
   clearSelectedFile();
+  setUploadLimitLabel(null);
   resetUploadProgress();
   setUploadingState(false);
   loginPanel.classList.remove("hidden");
@@ -354,9 +612,15 @@ async function sendMessageWithoutFile(formData) {
   };
 }
 
-async function downloadMessageFile(message) {
+async function downloadMessageFile(attachment) {
+  const downloadPath = attachment?.file_download_path;
+  if (!downloadPath) {
+    setStatus("Cannot download file");
+    return;
+  }
+
   try {
-    const response = await fetch(`${state.serverUrl}/api/uploads/${message.id}`, {
+    const response = await fetch(`${state.serverUrl}${downloadPath}`, {
       headers: {
         Authorization: `Bearer ${state.token}`,
       },
@@ -378,41 +642,82 @@ async function downloadMessageFile(message) {
     const blobUrl = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = blobUrl;
-    anchor.download = message.file_name || "download";
+    anchor.download = attachment.file_name || "download";
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(blobUrl);
 
-    setStatus(`Downloaded ${message.file_name || "file"}`);
+    setStatus(`Downloaded ${attachment.file_name || "file"}`);
   } catch (error) {
     setStatus(`Download error: ${error.message}`);
   }
 }
 
+function getMessageAttachments(message) {
+  if (Array.isArray(message.attachments) && message.attachments.length > 0) {
+    return message.attachments;
+  }
+
+  if (message.file_name) {
+    const hasDownloadPath = Boolean(message.file_download_path);
+    return [
+      {
+        id: null,
+        file_name: message.file_name,
+        file_path: message.file_path,
+        file_size: Number.isFinite(message.file_size) ? message.file_size : 0,
+        mime_type: message.mime_type || "application/octet-stream",
+        file_download_path: message.file_download_path || null,
+        available: hasDownloadPath,
+        availability_message: hasDownloadPath ? null : "File no longer available on server",
+      },
+    ];
+  }
+
+  return [];
+}
+
 function createAttachmentElement(message) {
-  if (!message.file_name) {
+  const attachments = getMessageAttachments(message);
+  if (attachments.length === 0) {
     return null;
   }
 
-  const attachment = document.createElement("div");
-  attachment.className = "message-attachment";
+  const container = document.createElement("div");
+  container.className = "message-attachments";
 
-  const meta = document.createElement("div");
-  meta.className = "message-attachment-meta";
-  meta.textContent = `${message.file_name} (${formatFileSize(message.file_size)})`;
+  attachments.forEach((attachment) => {
+    const attachmentRow = document.createElement("div");
+    attachmentRow.className = "message-attachment";
 
-  const downloadBtn = document.createElement("button");
-  downloadBtn.type = "button";
-  downloadBtn.className = "message-download";
-  downloadBtn.textContent = "Download";
-  downloadBtn.addEventListener("click", () => {
-    void downloadMessageFile(message);
+    const meta = document.createElement("div");
+    meta.className = "message-attachment-meta";
+    meta.textContent = `${attachment.file_name} (${formatFileSize(attachment.file_size)})`;
+
+    const isAvailable = attachment.available !== false && Boolean(attachment.file_download_path);
+
+    attachmentRow.appendChild(meta);
+
+    if (isAvailable) {
+      const downloadBtn = document.createElement("button");
+      downloadBtn.type = "button";
+      downloadBtn.className = "message-download";
+      downloadBtn.textContent = "Download";
+      downloadBtn.addEventListener("click", () => {
+        void downloadMessageFile(attachment);
+      });
+      attachmentRow.appendChild(downloadBtn);
+    } else {
+      const unavailableNote = document.createElement("div");
+      unavailableNote.className = "message-attachment-unavailable";
+      unavailableNote.textContent = attachment.availability_message || "File no longer available on server";
+      attachmentRow.appendChild(unavailableNote);
+    }
+    container.appendChild(attachmentRow);
   });
 
-  attachment.appendChild(meta);
-  attachment.appendChild(downloadBtn);
-  return attachment;
+  return container;
 }
 
 function messageToElement(message) {
@@ -471,6 +776,7 @@ function messageToElement(message) {
   const text = (message.content || "").trim();
   if (text) {
     const body = document.createElement("div");
+    body.className = "message-content";
     body.textContent = text;
     wrapper.appendChild(body);
   }
@@ -490,12 +796,40 @@ function messageToElement(message) {
   return wrapper;
 }
 
-function renderMessages(messages) {
+const BOTTOM_SCROLL_THRESHOLD_PX = 64;
+
+function isNearMessagesBottom(thresholdPx = BOTTOM_SCROLL_THRESHOLD_PX) {
+  const distanceToBottom =
+    messagesContainer.scrollHeight - messagesContainer.clientHeight - messagesContainer.scrollTop;
+  return distanceToBottom <= thresholdPx;
+}
+
+function renderMessages(messages, options = {}) {
+  const forceStickToBottom = options.forceStickToBottom === true;
+
+  const previousScrollTop = messagesContainer.scrollTop;
+  const previousScrollHeight = messagesContainer.scrollHeight;
+
+  // Keep user at bottom only when they were already there (or when explicitly requested,
+  // e.g. right after sending their own message).
+  const shouldStickToBottom = forceStickToBottom || isNearMessagesBottom();
+
   messagesContainer.innerHTML = "";
   messages.forEach((message) => {
     messagesContainer.appendChild(messageToElement(message));
   });
-  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  if (shouldStickToBottom) {
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    return;
+  }
+
+  // User is reading older messages: preserve visible position across refresh.
+  const newScrollHeight = messagesContainer.scrollHeight;
+  const heightDelta = newScrollHeight - previousScrollHeight;
+  const maxScrollTop = Math.max(0, newScrollHeight - messagesContainer.clientHeight);
+  const nextScrollTop = Math.min(maxScrollTop, Math.max(0, previousScrollTop + heightDelta));
+  messagesContainer.scrollTop = nextScrollTop;
 }
 
 function userToElement(user) {
@@ -535,7 +869,7 @@ function renderUsers(users) {
   }
 }
 
-async function fetchMessages() {
+async function fetchMessages(forceStickToBottom = false) {
   if (!state.serverUrl || !state.token) {
     return;
   }
@@ -560,7 +894,11 @@ async function fetchMessages() {
     }
 
     const messages = await response.json();
-    renderMessages(messages);
+    renderMessages(messages, { forceStickToBottom });
+    await fetchUploadLimit();
+    if (!state.token) {
+      return;
+    }
     setStatus(`Messages updated at ${new Date().toLocaleTimeString()}`);
   } catch (error) {
     setStatus(`Connection error: ${error.message}`);
@@ -601,12 +939,17 @@ async function fetchUsersPresence() {
 async function login(event) {
   event.preventDefault();
 
-  const serverUrl = normalizeServerUrl(serverUrlInput.value);
+  const { serverUrl, error: serverUrlError } = buildServerUrlFromInputs();
   const username = usernameInput.value.trim();
   const password = passwordInput.value;
 
-  if (!serverUrl || !username || !password) {
-    setStatus("Please enter server URL, username and password.");
+  if (serverUrlError) {
+    setStatus(serverUrlError);
+    return;
+  }
+
+  if (!username || !password) {
+    setStatus("Please enter username and password.");
     return;
   }
 
@@ -638,7 +981,7 @@ async function login(event) {
     clearSelectedFile();
     setStatus("Login successful");
 
-    await fetchMessages();
+    await fetchMessages(true);
     await fetchUsersPresence();
     startPolling();
   } catch (error) {
@@ -654,10 +997,23 @@ async function sendMessage(event) {
   }
 
   const content = messageInput.value.trim();
-  const selectedFile = fileInput?.files?.[0] ?? null;
+  const selectedFiles = getSelectedFiles();
+  const totalSelectedSize = getTotalFilesSize(selectedFiles);
+  const hasFileUpload = selectedFiles.length > 0;
 
-  if (!content && !selectedFile) {
+  if (!content && !hasFileUpload) {
     setStatus("Write a message or attach a file.");
+    return;
+  }
+
+  if (hasFileUpload && !state.uploadsEnabled) {
+    setStatus("File uploads are currently disabled by the server admin");
+    return;
+  }
+
+  if (hasFileUpload && Number.isFinite(state.maxUploadBytes) && state.maxUploadBytes > 0 && totalSelectedSize > state.maxUploadBytes) {
+    setFilesTooLarge(true);
+    setStatus(`Selected files exceed upload limit (${formatFileSize(totalSelectedSize)} > ${state.maxUploadMb} MB).`);
     return;
   }
 
@@ -669,14 +1025,13 @@ async function sendMessage(event) {
       payload.append("parent_message_id", String(state.currentReply.id));
     }
 
-    if (selectedFile) {
-      payload.append("file", selectedFile);
-    }
+    // Send all selected files in one multipart request.
+    selectedFiles.forEach((selectedFile) => {
+      payload.append("files", selectedFile);
+    });
 
     return payload;
   };
-
-  const hasFileUpload = Boolean(selectedFile);
 
   setUploadingState(true);
   if (hasFileUpload) {
@@ -721,7 +1076,7 @@ async function sendMessage(event) {
     messageInput.value = "";
     clearSelectedFile();
     clearReplyTarget();
-    await fetchMessages();
+    await fetchMessages(true);
     await fetchUsersPresence();
     setStatus("Message sent");
   } catch (error) {
@@ -853,15 +1208,19 @@ async function logout(notifyServer = true) {
   }
   clearPasswordFeedback();
   clearReplyTarget();
+  setUploadsEnabled(true);
   clearSelectedFile();
+  setUploadLimitLabel(null);
   resetUploadProgress();
   setUploadingState(false);
+  fillServerConnectionInputs("");
   showLogin();
 }
 
 async function tryRestoreSession() {
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) {
+    fillServerConnectionInputs("");
     showLogin();
     return;
   }
@@ -870,6 +1229,7 @@ async function tryRestoreSession() {
     const parsed = JSON.parse(raw);
     if (parsed.serverUrl && parsed.token && parsed.username) {
       state.serverUrl = parsed.serverUrl;
+      fillServerConnectionInputs(parsed.serverUrl);
       state.token = parsed.token;
       state.username = parsed.username;
       showChat();
@@ -878,7 +1238,7 @@ async function tryRestoreSession() {
       clearSelectedFile();
       resetUploadProgress();
       setUploadingState(false);
-      await fetchMessages();
+      await fetchMessages(true);
       await fetchUsersPresence();
       startPolling();
       setStatus("Session restored");
@@ -888,6 +1248,7 @@ async function tryRestoreSession() {
     // Ignore invalid local storage value.
   }
 
+  fillServerConnectionInputs("");
   showLogin();
 }
 
@@ -900,7 +1261,21 @@ if (filePickerBtn && fileInput) {
   });
 }
 if (fileInput) {
-  fileInput.addEventListener("change", updateSelectedFileLabel);
+  fileInput.addEventListener("change", () => {
+    if (!state.uploadsEnabled) {
+      fileInput.value = "";
+      clearSelectedFile();
+      setStatus("File uploads are currently disabled by the server admin");
+      return;
+    }
+
+    const incomingFiles = Array.from(fileInput.files ?? []).filter((file) => (file?.name || "").trim());
+    mergeSelectedFiles(incomingFiles);
+
+    // Reset native input so the same file can be selected again later if needed.
+    fileInput.value = "";
+    updateSelectedFileLabel();
+  });
 }
 if (messageInput && sendForm) {
   messageInput.addEventListener("keydown", (event) => {
@@ -933,4 +1308,3 @@ updateSelectedFileLabel();
 resetUploadProgress();
 setUploadingState(false);
 void tryRestoreSession();
-

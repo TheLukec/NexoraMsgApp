@@ -212,3 +212,42 @@ td {
   font-weight: 600;
   word-break: break-word;
 }
+
+.attachment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.attachment-meta {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.attachment-name {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.danger-zone {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.danger-grid {
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+}
+
+.danger-grid form {
+  margin: 0;
+}
+
+.danger-grid form input[type="hidden"] {
+  display: none;
+}
+
+.danger-grid button {
+  margin-top: 0;
+}

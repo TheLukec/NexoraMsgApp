@@ -10,7 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from admin import router as admin_router
 from auth import hash_password
-from chat_settings import ensure_upload_limit_setting
+from chat_settings import ensure_upload_limit_setting, ensure_uploads_enabled_setting
 from config import settings
 from database import SessionLocal, init_db
 from models import User
@@ -33,8 +33,9 @@ def create_default_admin() -> None:
             db.add(admin_user)
             db.commit()
 
-        # Ensure persistent server setting exists for upload size limit.
+        # Ensure persistent server settings exist for upload size limit and upload toggle.
         ensure_upload_limit_setting(db)
+        ensure_uploads_enabled_setting(db)
     finally:
         db.close()
 
@@ -81,4 +82,3 @@ def root() -> dict:
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host=settings.host, port=settings.port, reload=False)
-

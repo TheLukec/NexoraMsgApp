@@ -141,8 +141,15 @@
           <p class="muted">Connect to your server and sign in.</p>
 
           <form id="login-form">
-            <label for="server_url">Server URL/IP</label>
-            <input id="server_url" name="server_url" type="text" placeholder="http://127.0.0.1:8000" required />
+            <label for="server_host">Server Connection</label>
+            <div class="server-connection-row">
+              <select id="server_protocol" name="server_protocol" aria-label="Protocol">
+                <option value="http://">http</option>
+                <option value="https://" selected>https</option>
+              </select>
+              <input id="server_host" name="server_host" type="text" placeholder="Domain or IP" autocomplete="on" required />
+              <input id="server_port" name="server_port" type="number" placeholder="port" value="443" min="1" max="65535" required />
+            </div>
 
             <label for="username">Username</label>
             <input id="username" name="username" type="text" required />
@@ -185,8 +192,8 @@
           <form id="send-form" class="send-form">
             <div class="send-fields">
               <div class="send-main-row">
-                <input id="message-input" type="text" placeholder="Write a message..." maxlength="1000" />
-                <input id="file-input" type="file" class="hidden-file-input" />
+                <input id="message-input" type="text" placeholder="Write a message..." autocomplete="off" maxlength="1000" />
+                <input id="file-input" type="file" class="hidden-file-input" multiple />
                 <button
                   id="file-picker-btn"
                   type="button"
@@ -200,7 +207,9 @@
               </div>
               <div class="send-meta-row">
                 <span id="selected-file" class="muted file-selected">No file selected</span>
+                <span id="upload-limit" class="muted upload-limit-text">Max upload size: -</span>
               </div>
+              <ul id="selected-files-list" class="selected-files-list muted"></ul>
               <div id="upload-progress" class="upload-progress hidden" aria-hidden="true">
                 <div id="upload-progress-bar" class="upload-progress-bar"></div>
               </div>

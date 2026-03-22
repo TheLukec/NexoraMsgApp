@@ -42,7 +42,7 @@ class Message(Base):
     reply_to_username: Mapped[str | None] = mapped_column(String(50), nullable=True)
     reply_to_content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Optional file attachment metadata for this message.
+    # Legacy single-file metadata kept for backward compatibility.
     file_original_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     file_storage_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -51,6 +51,34 @@ class Message(Base):
     author = relationship("User", back_populates="messages")
     parent_message = relationship("Message", remote_side="Message.id", back_populates="replies")
     replies = relationship("Message", back_populates="parent_message")
+    attachments = relationship(
+        "MessageAttachment",
+        back_populates="message",
+        cascade="all, delete-orphan",
+        order_by="MessageAttachment.id.asc()",
+    )
+
+
+class MessageAttachment(Base):
+    __tablename__ = "message_attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    message_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    stored_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    file_path: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Marks attachment availability so UI can show "removed by admin" without deleting the message.
+    is_available: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    message = relationship("Message", back_populates="attachments")
 
 
 class AppSetting(Base):
@@ -64,3 +92,4 @@ class AppSetting(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+

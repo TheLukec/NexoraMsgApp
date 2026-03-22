@@ -56,6 +56,17 @@ class ReplyToOut(BaseModel):
     deleted: bool = False
 
 
+class MessageAttachmentOut(BaseModel):
+    id: int | None = None
+    file_name: str
+    file_path: str
+    file_size: int
+    mime_type: str
+    file_download_path: str | None = None
+    available: bool = True
+    availability_message: str | None = None
+
+
 class MessageOut(BaseModel):
     id: int
     content: str
@@ -64,6 +75,9 @@ class MessageOut(BaseModel):
     parent_message_id: int | None = None
     reply_to: ReplyToOut | None = None
 
+    attachments: list[MessageAttachmentOut] = Field(default_factory=list)
+
+    # Legacy fields remain for compatibility with older clients.
     file_name: str | None = None
     file_path: str | None = None
     file_size: int | None = None
@@ -74,3 +88,8 @@ class MessageOut(BaseModel):
 class StatsOut(BaseModel):
     users_total: int
     messages_total: int
+
+
+class UploadLimitOut(BaseModel):
+    max_upload_mb: int
+    uploads_enabled: bool

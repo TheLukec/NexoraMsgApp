@@ -70,8 +70,35 @@ def _ensure_message_columns_for_existing_databases() -> None:
                 pass
 
 
+def _ensure_message_attachment_columns_for_existing_databases() -> None:
+    """Add attachment columns that may be missing on older databases."""
+    inspector = inspect(engine)
+    if "message_attachments" not in inspector.get_table_names():
+        return
+
+    column_names = {column["name"] for column in inspector.get_columns("message_attachments")}
+
+    with engine.begin() as connection:
+        if "is_available" not in column_names:
+            if engine.dialect.name == "mysql":
+                connection.execute(
+                    text(
+                        "ALTER TABLE message_attachments "
+                        "ADD COLUMN is_available TINYINT(1) NOT NULL DEFAULT 1"
+                    )
+                )
+            else:
+                connection.execute(
+                    text(
+                        "ALTER TABLE message_attachments "
+                        "ADD COLUMN is_available BOOLEAN NOT NULL DEFAULT 1"
+                    )
+                )
+
+
 def init_db() -> None:
     import models  # Local import to avoid circular imports.
 
     Base.metadata.create_all(bind=engine)
     _ensure_message_columns_for_existing_databases()
+    _ensure_message_attachment_columns_for_existing_databases()

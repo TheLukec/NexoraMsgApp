@@ -38,11 +38,33 @@
     <section class="panel">
       <h2>File Upload Limit</h2>
       <p class="muted">Current max upload size: <strong>{{ max_upload_mb }} MB</strong></p>
+      <p class="muted">Uploads status: <strong>{{ "Enabled" if uploads_enabled else "Disabled" }}</strong></p>
       <form method="post" action="/admin/settings/upload-limit" class="grid-form compact-form">
         <label for="max_upload_mb">Max upload size (MB)</label>
         <input id="max_upload_mb" name="max_upload_mb" type="number" required min="1" max="2048" value="{{ max_upload_mb }}" />
         <button type="submit">Save</button>
       </form>
+    </section>
+
+    <section class="panel danger-zone">
+      <h2>Server Maintenance</h2>
+      <p class="muted">Dangerous actions. These operations are irreversible.</p>
+      <div class="danger-grid">
+        <form method="post" action="/admin/clear-messages" onsubmit="return confirm('Delete all messages and attachments? This cannot be undone.');">
+          <button type="submit" class="danger">Clear all messages</button>
+        </form>
+
+        <form method="post" action="/admin/clear-uploads" onsubmit="return confirm('Delete all uploaded files but keep messages?');">
+          <button type="submit" class="danger">Clear all uploads</button>
+        </form>
+
+        <form method="post" action="/admin/uploads/toggle" onsubmit="return confirm('Toggle global upload availability?');">
+          <input type="hidden" name="uploads_enabled" value="{{ 'false' if uploads_enabled else 'true' }}" />
+          <button type="submit" class="{{ 'danger' if uploads_enabled else '' }}">
+            {{ "Disable uploads" if uploads_enabled else "Enable uploads" }}
+          </button>
+        </form>
+      </div>
     </section>
 
     <section class="panel">
@@ -65,7 +87,7 @@
 
     <section class="panel">
       <h2>Users</h2>
-      <div class="table-wrapper">
+      <div id="admin-users-table-wrapper" class="table-wrapper" data-preserve-scroll>
         <table>
           <thead>
             <tr>
@@ -109,7 +131,7 @@
 
     <section class="panel">
       <h2>All Messages</h2>
-      <div class="table-wrapper">
+      <div id="admin-messages-table-wrapper" class="table-wrapper" data-preserve-scroll>
         <table>
           <thead>
             <tr>
@@ -134,11 +156,29 @@
                   {% endif %}
                 </td>
                 <td>
-                  {% if message.file_original_name %}
+                  {% if message.attachments %}
+                    <div class="attachment-list">
+                      {% for attachment in message.attachments %}
+                        <div class="attachment-meta">
+                          <div class="attachment-name">{{ attachment.original_name }}</div>
+                          <div class="muted">{{ attachment.file_size }} bytes</div>
+                          {% if attachment.is_available %}
+                            <a class="button-link small" href="/admin/uploads/attachments/{{ attachment.id }}">Download</a>
+                          {% else %}
+                            <div class="muted">Attachment was removed by admin</div>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% elif message.file_original_name %}
                     <div class="attachment-meta">
                       <div class="attachment-name">{{ message.file_original_name }}</div>
                       <div class="muted">{{ message.file_size }} bytes</div>
-                      <a class="button-link small" href="/admin/uploads/{{ message.id }}">Download</a>
+                      {% if message.file_storage_name %}
+                        <a class="button-link small" href="/admin/uploads/{{ message.id }}">Download</a>
+                      {% else %}
+                        <div class="muted">Attachment was removed by admin</div>
+                      {% endif %}
                     </div>
                   {% else %}
                     <span class="muted">No file</span>
@@ -161,5 +201,88 @@
       </div>
     </section>
   </main>
+  <script>
+    (() => {
+      const SCROLL_STATE_KEY = "nexora_admin_scroll_state_v1";
+
+      function getTrackedScrollContainers() {
+        return Array.from(document.querySelectorAll("[data-preserve-scroll]")).filter(
+          (element) => Boolean(element.id),
+        );
+      }
+
+      function captureScrollState() {
+        return {
+          windowX: window.scrollX,
+          windowY: window.scrollY,
+          containers: getTrackedScrollContainers().map((element) => ({
+            id: element.id,
+            scrollTop: element.scrollTop,
+            scrollLeft: element.scrollLeft,
+          })),
+        };
+      }
+
+      function saveScrollStateForNextRender() {
+        try {
+          sessionStorage.setItem(SCROLL_STATE_KEY, JSON.stringify(captureScrollState()));
+        } catch (_) {
+          // Ignore storage errors and continue with normal form submit.
+        }
+      }
+
+      function restoreScrollState() {
+        let parsedState = null;
+        try {
+          const rawState = sessionStorage.getItem(SCROLL_STATE_KEY);
+          if (!rawState) {
+            return;
+          }
+          sessionStorage.removeItem(SCROLL_STATE_KEY);
+          parsedState = JSON.parse(rawState);
+        } catch (_) {
+          return;
+        }
+
+        // Restore after render so admin stays near the same place after delete/update/create actions.
+        requestAnimationFrame(() => {
+          window.scrollTo({
+            left: Number.isFinite(parsedState?.windowX) ? parsedState.windowX : 0,
+            top: Number.isFinite(parsedState?.windowY) ? parsedState.windowY : 0,
+            behavior: "auto",
+          });
+
+          if (!Array.isArray(parsedState?.containers)) {
+            return;
+          }
+
+          parsedState.containers.forEach((containerState) => {
+            const element = document.getElementById(containerState.id);
+            if (!element) {
+              return;
+            }
+
+            if (Number.isFinite(containerState.scrollTop)) {
+              element.scrollTop = containerState.scrollTop;
+            }
+            if (Number.isFinite(containerState.scrollLeft)) {
+              element.scrollLeft = containerState.scrollLeft;
+            }
+          });
+        });
+      }
+
+      function bindAdminActionForms() {
+        document.querySelectorAll("form").forEach((form) => {
+          form.addEventListener("submit", () => {
+            saveScrollStateForNextRender();
+          });
+        });
+      }
+
+      restoreScrollState();
+      bindAdminActionForms();
+    })();
+  </script>
 </body>
 </html>
