@@ -1,66 +1,86 @@
 # Technology Decisions
 
-This document explains why the project uses specific technologies and structure.
+This document explains why the current architecture and implementation choices were made.
 
-## Why Python backend
+## 1) Why Python for both runtimes
 
-- Fast development speed and readable syntax.
-- Strong ecosystem for web backends (FastAPI, Flask, SQLAlchemy).
-- Suitable for teaching because code stays compact and explicit.
-- Easy onboarding for students and teams.
+- Fast development and clear syntax.
+- Easy readability for education and oral project defense.
+- Strong libraries for API and DB work.
+- Consistent language across app and server lowers onboarding cost.
 
-## Why JavaScript frontend
+## 2) Why FastAPI on server
 
-- Browser-native language for interactive UI behavior.
-- Simple direct API integration via `fetch`.
-- No heavy frontend framework needed for this project scope.
-- Easy to inspect and demonstrate in browser developer tools.
+- Strong typed request/response modeling (Pydantic).
+- Clean dependency injection for auth and DB sessions.
+- Good match for modular route-based architecture.
+- Easy to extend with async upload handling.
 
-## Why MySQL
+## 3) Why Flask for local app launcher
 
-- Reliable relational database for user/message data.
-- Good support in Docker ecosystem.
-- Common in production and education contexts.
-- Natural fit for structured tables and joins.
+- Lightweight and simple for serving one UI page.
+- Good fit when most client logic is in browser JavaScript.
+- Minimal framework overhead for local desktop-like launcher behavior.
 
-## Why Docker for server side
+## 4) Why vanilla JavaScript frontend
+
+- No framework lock-in for a learning-oriented project.
+- Direct control over polling, rendering, and upload state.
+- Easy debugging in browser devtools.
+- Lower complexity for incremental feature additions.
+
+## 5) Why MySQL
+
+- Reliable relational storage for users/messages/attachments/settings.
+- Familiar and practical for school and small deployments.
+- Works well with Docker and SQLAlchemy.
+
+## 6) Why Docker for server stack
 
 - One-command startup for backend + database.
-- Reduces "works on my machine" setup problems.
-- Keeps runtime consistent across environments.
-- Simplifies deployment progression later.
+- Consistent runtime across machines.
+- Persistent volumes simplify operational reliability.
+- Easy to demonstrate deployment basics.
 
-## Why split into `app` and `server`
+## 7) Why separate `app` and `server`
 
-- Clear separation of concerns:
-  - `app` handles local client UX.
-  - `server` handles shared data and authentication.
-- Enables multiple users to connect to one host.
-- Easier to evolve frontend and backend independently.
-- Better architecture for demonstrating client-server model.
+- Clear separation of concerns.
+- Mirrors real client-server architecture.
+- Multiple users can run local app while sharing one server.
+- Easier future evolution of either side without tight coupling.
 
-## Why FastAPI for server
+## 8) Why mixed auth model (JWT + session)
 
-- Typed request models with Pydantic.
-- Dependency injection for auth and DB sessions.
-- Clean modular route design.
-- Strong docs/testing friendliness for future upgrades.
+- JWT for `/api` endpoints used by JS app clients.
+- Session cookies for server-rendered admin panel forms.
+- Practical split that keeps each UI/auth surface simple.
 
-## Why Flask for local app
+## 9) Why sessionStorage for user auth persistence
 
-- Very lightweight and simple for serving static/template UI.
-- Minimal moving parts for local launcher.
-- Ideal when frontend logic mostly lives in JavaScript.
+- Requirement: user should not stay logged in after closing tab/window.
+- `sessionStorage` provides per-session persistence only.
+- Prevents accidental long-lived browser auth reuse from older localStorage behavior.
 
-## Why JWT for API auth and session for admin panel
+## 10) Why frontend inactivity timer for admin auto logout
 
-- JWT is practical for stateless API calls from client app.
-- Session cookies are practical for server-rendered admin forms.
-- This mixed approach keeps each surface simple for its use case.
+- Requirement-focused, simple to understand and explain.
+- Immediate UX feedback and clear redirect path with notice message.
+- Complements server session checks by forcing timed logout after no interaction.
 
-## Why modular file organization
+## 11) Why keep compatibility fields for attachments
 
-- Easier maintenance and focused responsibility per file.
-- Lower risk of merge conflicts and accidental coupling.
-- Better for explaining project architecture to others.
-- Makes incremental upgrades predictable.
+- Existing data and older clients may still rely on legacy single-file message fields.
+- New model supports multi-file attachments cleanly.
+- Compatibility layer allows safer transition without breaking all old paths at once.
+
+## 12) Why lightweight startup DB compatibility checks
+
+- Project currently avoids heavy migration stack complexity.
+- Startup checks add missing columns for older DBs.
+- Good compromise for educational context, with note to adopt Alembic later.
+
+## 13) Why polling instead of WebSocket
+
+- Simpler implementation and easier debugging.
+- Sufficient for scope and small user count.
+- Still supports required behaviors (chat refresh, settings refresh, presence updates).

@@ -1,36 +1,78 @@
-# Nexora Msg App - Simple Group Chat
+# Nexora Msg App
 
-Simple modular project with two clearly separated parts:
+Nexora Msg App is a modular group-chat project with two clearly separated runtimes:
 
-- `server`: central group chat server (FastAPI + MySQL + admin panel)
-- `app`: local user client app (Flask + browser UI + JavaScript)
+- `server` (FastAPI + MySQL + admin panel)
+- `app` (Flask launcher + browser UI in JavaScript)
 
-The system is a lightweight Discord-like server alternative for one shared group chat (no DMs).
+It is intentionally a **single shared server chat** (Discord-like baseline) without channels, DMs, voice, video, or reactions.
 
-## Python Version
+## Table of Contents
 
-Both `server` and `app` are designed for **Python 3.12.10**.
+- [Project Goals](#project-goals)
+- [Core Features](#core-features)
+- [Architecture at a Glance](#architecture-at-a-glance)
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Security Notes](#security-notes)
+- [Documentation Map](#documentation-map)
+
+## Project Goals
+
+- Keep implementation simple, readable, and modular.
+- Keep `app` and `server` separated for easier learning and future upgrades.
+- Provide practical admin tooling for user/chat/upload management.
+- Support Docker-first backend setup with persistent DB and upload volumes.
+
+## Core Features
+
+- User login with JWT bearer auth.
+- Login UI with three connection fields: protocol + domain/IP + port.
+- Shared group chat with polling refresh.
+- Reply-to-message (single-level, no threads).
+- Message delete:
+  - user deletes own messages,
+  - admin can delete any message.
+- Active users sidebar (online/offline indicator via presence heartbeat).
+- Multi-file upload per message (text only, files only, or text + files).
+- Upload limit:
+  - persistent server setting,
+  - shown to users,
+  - validated in frontend and backend using total selected upload size.
+- Upload controls in user UI:
+  - remove single selected file before send,
+  - progress indicator during upload.
+- Upload availability states:
+  - attachments can be marked unavailable,
+  - UI shows `Attachment was removed by admin` / `File no longer available on server`.
+- Admin panel tools:
+  - create user,
+  - change any user password,
+  - delete user with full data cleanup,
+  - delete messages,
+  - change upload limit,
+  - disable/enable uploads globally,
+  - clear all uploads,
+  - clear all messages and attachments.
+- Admin auto logout after 2 minutes of inactivity.
+- User app auth is session-only (does not survive closing browser tab/window).
+- Docker persistence:
+  - `mysql_data` for MySQL,
+  - `chat_uploads` for uploaded files.
+
+## Architecture at a Glance
+
+- `app` serves HTML/CSS/JS locally and calls the remote `server` API.
+- `server` owns authentication, authorization, persistence, upload storage, and admin GUI.
+- `server` stores data in MySQL using SQLAlchemy models.
+- Upload files are stored on disk in `UPLOADS_DIR` and mapped to Docker volume in containerized mode.
 
 ## Project Structure
 
 ```text
 NexoraMsgApp/
-|-- start.bat
-|-- .gitattributes
-|-- LICENSE
 |-- README.md
-|-- README/
-|   |-- README.md
-|   |-- project_overview.md
-|   |-- app_explained.md
-|   |-- server_explained.md
-|   |-- database_explained.md
-|   |-- admin_panel_explained.md
-|   |-- technology_decisions.md
-|   |-- file_by_file_explanation.md
-|   |-- setup_guide.md
-|   |-- usage_guide.md
-|   `-- program_flow_step_by_step.md
 |-- app/
 |   |-- main.py
 |   |-- config.py
@@ -41,139 +83,123 @@ NexoraMsgApp/
 |   |   `-- index.html
 |   `-- static/
 |       |-- app.js
-|       `-- styles.css
-`-- server/
-    |-- main.py
-    |-- config.py
-    |-- database.py
-    |-- models.py
-    |-- schemas.py
-    |-- auth.py
-    |-- routes.py
-    |-- admin.py
-    |-- requirements.txt
-    |-- Dockerfile
-    |-- docker-compose.yml
-    |-- .env
-    |-- .env.example
-    |-- initdb/
-    |   `-- 01-init.sql
-    |-- templates/
-    |   |-- admin_login.html
-    |   `-- admin_dashboard.html
-    `-- static/
-        `-- admin.css
+|       `-- style.css
+|-- server/
+|   |-- main.py
+|   |-- config.py
+|   |-- database.py
+|   |-- models.py
+|   |-- schemas.py
+|   |-- auth.py
+|   |-- routes.py
+|   |-- admin.py
+|   |-- presence.py
+|   |-- chat_settings.py
+|   |-- upload_service.py
+|   |-- user_cleanup.py
+|   |-- requirements.txt
+|   |-- Dockerfile
+|   |-- docker-compose.yml
+|   |-- .env.example
+|   |-- initdb/
+|   |   `-- 01-init.sql
+|   |-- templates/
+|   |   |-- admin_login.html
+|   |   `-- admin_dashboard.html
+|   |-- static/
+|   |   `-- admin.css
+|   `-- uploads/
+|       `-- .gitkeep
+`-- README/
+    |-- README.md
+    |-- project_overview.md
+    |-- architecture.md
+    |-- features.md
+    |-- server_explained.md
+    |-- app_explained.md
+    |-- database_explained.md
+    |-- api_reference.md
+    |-- admin_panel_explained.md
+    |-- setup_guide.md
+    |-- usage_guide.md
+    |-- program_flow_step_by_step.md
+    |-- file_by_file_explanation.md
+    `-- technology_decisions.md
 ```
 
-## How It Works
+## Quick Start
 
-1. Host/admin starts `server` (with Docker recommended).
-2. Server connects to MySQL and stores users + messages.
-3. User starts `app` locally on their computer.
-4. Browser opens local app UI and asks for:
-   - server URL/IP
-   - username
-   - password
-5. After login, user enters shared group chat and can send/read messages.
-
-## Server Setup (Docker Recommended)
-
-1. Open terminal in `server`:
-   ```bash
-   cd server
-   ```
-2. Start services:
-   ```bash
-   docker compose up --build
-   ```
-3. Access:
-   - API root: `http://localhost:8000/`
-   - Admin panel: `http://localhost:8000/admin/login`
-
-## Docker Volumes (Persistent Data)
-
-- MySQL data is stored in volume `mysql_data`.
-- Uploaded chat files are stored in dedicated volume `chat_uploads` (mounted to `/app/uploads` in server container).
-- Server upload path is configured via environment variable `UPLOADS_DIR` (Docker compose sets it to `/app/uploads`).
-
-Check volumes:
+### 1) Start server (Docker)
 
 ```bash
-docker volume ls
+cd server
+cp .env.example .env
+docker compose up --build
 ```
 
-Inspect uploads volume:
+Server endpoints:
+
+- API root: `http://localhost:8000/`
+- Health: `http://localhost:8000/api/health`
+- Admin login: `http://localhost:8000/admin/login`
+
+### 2) Start app
 
 ```bash
-docker volume inspect chat_uploads
+cd app
+python -m venv .venv
+# Windows: .\.venv\Scripts\Activate.ps1
+# Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
 ```
 
-Backup uploaded files:
+Local app URL:
 
-```bash
-docker run --rm -v chat_uploads:/volume -v ${PWD}:/backup alpine sh -c "cd /volume && tar czf /backup/chat_uploads_backup.tar.gz ."
-```
+- `http://127.0.0.1:5000`
 
-Restore uploaded files:
+## Configuration
 
-```bash
-docker run --rm -v chat_uploads:/volume -v ${PWD}:/backup alpine sh -c "cd /volume && tar xzf /backup/chat_uploads_backup.tar.gz"
-```
+Server config comes from `server/.env`.
 
-Default admin credentials come from `.env`:
-- `DEFAULT_ADMIN_USERNAME=admin`
-- `DEFAULT_ADMIN_PASSWORD=admin123`
+Important keys:
 
-Change these before production use.
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `DEFAULT_ADMIN_USERNAME`
+- `DEFAULT_ADMIN_PASSWORD`
+- `UPLOADS_DIR`
+- `DEFAULT_MAX_UPLOAD_MB`
+- `ACCESS_TOKEN_EXPIRE_MINUTES`
 
-## Server Setup (Without Docker)
+Docker volumes in `server/docker-compose.yml`:
 
-1. In `server` folder:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-2. Ensure MySQL is running and update `DATABASE_URL` in environment.
-3. Run:
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000
-   ```
+- `mysql_data` (database)
+- `chat_uploads` (uploaded files)
 
-## App Setup
-
-1. Open terminal in `app`:
-   ```bash
-   cd app
-   ```
-2. Create virtual environment and install dependencies:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-3. Start app:
-   ```bash
-   python main.py
-   ```
-4. Browser opens automatically on `http://127.0.0.1:5000`.
-
-## Basic API Endpoints
-
-- `POST /api/auth/login` - user login
-- `GET /api/messages` - get chat messages
-- `POST /api/messages` - send new message
-- `GET /api/users` - list users (admin only)
-- `POST /api/users` - create user (admin only)
-- `DELETE /api/users/{user_id}` - delete user (admin only)
-
-## Notes
+## Security Notes
 
 - Passwords are hashed with bcrypt (`passlib`).
-- No DMs, no voice/video, no files, no reactions.
-- Code is intentionally simple and modular for easy upgrades.
+- Protected API endpoints require bearer token.
+- Admin panel uses server-side session.
+- Admin panel auto-logout after inactivity (2 minutes).
+- User app auth state is kept in `sessionStorage` and not restored after closing tab/window.
+- Backend validates upload limits and upload-enabled state (not frontend-only).
 
-## Detailed Documentation
+## Documentation Map
 
-For full in-depth project documentation, open the `README/` folder.
-Start with `README/README.md` and then continue through the detailed guides.
+Detailed docs are in [`README/README.md`](README/README.md).
+
+Recommended order:
+
+1. `README/project_overview.md`
+2. `README/architecture.md`
+3. `README/features.md`
+4. `README/setup_guide.md`
+5. `README/server_explained.md`
+6. `README/app_explained.md`
+7. `README/api_reference.md`
+8. `README/admin_panel_explained.md`
+9. `README/program_flow_step_by_step.md`
+10. `README/file_by_file_explanation.md`
+

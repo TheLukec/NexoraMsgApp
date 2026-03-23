@@ -314,18 +314,39 @@ async function fetchUploadLimit() {
   }
 }
 function saveSession() {
-  localStorage.setItem(
-    SESSION_KEY,
-    JSON.stringify({
-      serverUrl: state.serverUrl,
-      token: state.token,
-      username: state.username,
-    }),
-  );
+  const sessionPayload = JSON.stringify({
+    serverUrl: state.serverUrl,
+    token: state.token,
+    username: state.username,
+  });
+
+  // Session-only persistence: auth is lost when tab/window is closed.
+  try {
+    sessionStorage.setItem(SESSION_KEY, sessionPayload);
+  } catch (_) {
+    // Ignore browser storage errors.
+  }
+
+  // Cleanup legacy persistent login key from older versions.
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch (_) {
+    // Ignore browser storage errors.
+  }
 }
 
 function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch (_) {
+    // Ignore browser storage errors.
+  }
+
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch (_) {
+    // Ignore browser storage errors.
+  }
 }
 
 function stopPolling() {
@@ -1218,7 +1239,19 @@ async function logout(notifyServer = true) {
 }
 
 async function tryRestoreSession() {
-  const raw = localStorage.getItem(SESSION_KEY);
+  // Ensure old persistent token storage is wiped on startup.
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch (_) {
+    // Ignore browser storage errors.
+  }
+
+  let raw = null;
+  try {
+    raw = sessionStorage.getItem(SESSION_KEY);
+  } catch (_) {
+    raw = null;
+  }
   if (!raw) {
     fillServerConnectionInputs("");
     showLogin();
@@ -1245,7 +1278,7 @@ async function tryRestoreSession() {
       return;
     }
   } catch (_) {
-    // Ignore invalid local storage value.
+    // Ignore invalid stored session value.
   }
 
   fillServerConnectionInputs("");

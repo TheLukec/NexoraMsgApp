@@ -1,16 +1,18 @@
 # Setup Guide
 
-## Prerequisites
+## 1) Requirements
 
 - Python 3.12.10
-- Docker Desktop (recommended for server + MySQL)
-- Optional: local MySQL if you skip Docker
+- Docker Desktop (recommended for server stack)
+- Modern browser
 
-## Quick start (recommended path)
+Optional:
 
-### 1) Start server with Docker
+- local MySQL if not using Docker
 
-Run from project root:
+## 2) Server setup (recommended: Docker)
+
+From project root:
 
 ```bash
 cd server
@@ -18,7 +20,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Windows PowerShell:
+PowerShell alternative:
 
 ```powershell
 cd server
@@ -26,85 +28,20 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-### 2) Start local app
+Server should be reachable at:
 
-Open second terminal from project root:
+- `http://localhost:8000/`
+- `http://localhost:8000/api/health`
+- `http://localhost:8000/admin/login`
 
-```bash
-cd app
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python main.py
-```
+## 3) Docker persistence
 
-Windows PowerShell activation:
+Compose defines two persistent volumes:
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
+- `mysql_data` for MySQL files,
+- `chat_uploads` for uploaded attachments.
 
-### 3) Open browser
-
-The app opens automatically at:
-`http://127.0.0.1:5000`
-
-## `.env` configuration explained (server)
-
-Copy `server/.env.example` to `server/.env`.
-
-Important variables:
-
-- `DATABASE_URL`: SQLAlchemy connection URL.
-- `SECRET_KEY`: session + JWT signing secret.
-- `DEFAULT_ADMIN_USERNAME`: initial admin name.
-- `DEFAULT_ADMIN_PASSWORD`: initial admin password.
-- `CORS_ALLOW_ORIGINS`: allowed browser origins (`*` for development).
-- `UPLOADS_DIR`: upload storage path (in Docker compose it is set to `/app/uploads`).
-- `DEFAULT_MAX_UPLOAD_MB`: default upload size limit in MB.
-
-MySQL container variables:
-
-- `MYSQL_DATABASE`
-- `MYSQL_USER`
-- `MYSQL_PASSWORD`
-- `MYSQL_ROOT_PASSWORD`
-
-## Admin account creation logic
-
-Admin account is created automatically at server startup only if missing.
-Values come from:
-
-- `DEFAULT_ADMIN_USERNAME`
-- `DEFAULT_ADMIN_PASSWORD`
-
-If admin already exists, startup will not overwrite it.
-
-## Running server without Docker
-
-1. Ensure MySQL instance exists and database is created.
-2. Set environment values manually (especially `DATABASE_URL`).
-3. Install dependencies:
-
-```bash
-cd server
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-
-## Docker persistence for uploads
-
-`server/docker-compose.yml` defines two persistent volumes:
-
-- `mysql_data` for MySQL data
-- `chat_uploads` for uploaded files
-
-The server container mounts `chat_uploads` to `/app/uploads` and compose sets `UPLOADS_DIR=/app/uploads`.
-
-Check volume existence:
+Check volumes:
 
 ```bash
 docker volume ls
@@ -116,20 +53,77 @@ Inspect uploads volume:
 docker volume inspect chat_uploads
 ```
 
-Backup uploaded files:
+Backup uploads:
 
 ```bash
 docker run --rm -v chat_uploads:/volume -v ${PWD}:/backup alpine sh -c "cd /volume && tar czf /backup/chat_uploads_backup.tar.gz ."
 ```
 
-Restore uploaded files:
+Restore uploads:
 
 ```bash
 docker run --rm -v chat_uploads:/volume -v ${PWD}:/backup alpine sh -c "cd /volume && tar xzf /backup/chat_uploads_backup.tar.gz"
 ```
 
-## Basic verification checks
+## 4) Server `.env` configuration
 
-- `http://localhost:8000/api/health` returns status.
-- `http://localhost:8000/admin/login` opens admin login page.
-- local app page loads and login form is visible.
+Use `server/.env.example` as baseline.
+
+Important keys:
+
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `DEFAULT_ADMIN_USERNAME`
+- `DEFAULT_ADMIN_PASSWORD`
+- `ACCESS_TOKEN_EXPIRE_MINUTES`
+- `UPLOADS_DIR`
+- `DEFAULT_MAX_UPLOAD_MB`
+- `CORS_ALLOW_ORIGINS`
+
+MySQL-related keys:
+
+- `MYSQL_DATABASE`
+- `MYSQL_USER`
+- `MYSQL_PASSWORD`
+- `MYSQL_ROOT_PASSWORD`
+
+## 5) App setup
+
+From project root:
+
+```bash
+cd app
+python -m venv .venv
+# Windows: .\.venv\Scripts\Activate.ps1
+# Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
+
+The app starts on `http://127.0.0.1:5000` by default and opens browser automatically.
+
+## 6) Optional local server setup (without Docker)
+
+```bash
+cd server
+python -m venv .venv
+# activate venv
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+You must provide a reachable MySQL and correct `DATABASE_URL`.
+
+## 7) First-time login checks
+
+1. Open admin panel and login with default admin credentials from `.env`.
+2. Create at least one non-admin user.
+3. Start app, connect to server, and login as that user.
+4. Send a test message and optional file upload.
+
+## 8) Common startup issues
+
+- `Invalid or expired token`: user must login again.
+- Upload rejected: check admin upload limit and uploads-enabled toggle.
+- App reconnect problems: verify protocol/domain/port values.
+- DB errors: check `docker compose ps` and `DATABASE_URL` consistency.

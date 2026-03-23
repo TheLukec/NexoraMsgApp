@@ -1,83 +1,123 @@
 # Usage Guide
 
-## Typical usage roles
+## 1) Roles
 
-- Server owner/admin.
-- Regular chat user.
+- `Admin` (server owner/operator)
+- `User` (regular chat participant)
 
-## Server owner workflow
+## 2) Admin workflow
 
-1. Start server stack (`docker compose up --build`).
-2. Open admin panel at `/admin/login`.
-3. Login with default admin credentials from `.env`.
-4. Create user accounts in dashboard.
-5. Share server URL/IP and credentials with users.
+1. Open `http://<server-host>:8000/admin/login`.
+2. Login as admin.
+3. Create user accounts.
+4. Share credentials + server address to users.
+5. Monitor messages and attachments from dashboard.
+6. Manage upload policy as needed.
 
-## Regular user workflow
+### Admin maintenance actions
 
-1. Start local `app`.
-2. In browser login form enter:
-   - server URL or IP
-   - username
-   - password
+- `Clear all messages`: wipes chat history and all attachment data/files.
+- `Clear all uploads`: keeps messages, removes physical files, marks attachments unavailable.
+- `Disable uploads`: blocks new file uploads globally (text messages still work).
+
+### Admin session behavior
+
+- If no activity for 2 minutes, admin is auto logged out.
+- Login page shows inactivity notice after auto logout.
+
+## 3) User workflow
+
+1. Start local app (`python app/main.py`).
+2. In login form enter:
+   - protocol,
+   - domain/IP,
+   - port,
+   - username,
+   - password.
 3. Submit login.
-4. After successful login:
-   - see current messages.
-   - send new message.
-   - auto-refresh receives new chat updates.
+4. Use chat features:
+   - send text,
+   - reply,
+   - attach files,
+   - delete own messages,
+   - change own password.
 
-## How to create users
+## 4) Sending files
 
-Use admin panel:
+User can send:
 
-1. Login as admin.
-2. Fill username + password in "Create User".
-3. Optionally mark user as admin.
-4. Click "Create User".
+- text only,
+- files only,
+- text + files.
 
-Alternative (API):
+Before sending:
 
-- `POST /api/users` with admin bearer token.
+- selected files are listed,
+- each file can be removed (`X`),
+- total size vs limit is shown,
+- send is blocked if total exceeds current limit.
 
-## How to remove users
+During send:
 
-Use admin panel users table and click "Delete" for target user.
-Current logged-in admin cannot delete own account in one click.
+- progress indicator is shown.
 
-## How users connect to remote server
+After send:
 
-In app login screen, user can enter:
+- text and selected files reset.
 
-- `http://host-ip:8000`
-- or domain name URL if deployed publicly.
+## 5) Reply usage
 
-Example:
-- `http://192.168.1.20:8000`
-- `https://chat.example.com`
+- Click `Reply` on target message.
+- Reply preview appears above input.
+- Click `Cancel` to exit reply mode.
+- Sent message stores reference to original parent message.
 
-## Chat usage notes
+## 6) Upload-related notices in chat
 
-- All users share one common message stream.
-- Refresh button forces immediate update.
-- Background polling runs every 3 seconds.
-- Logout clears saved token/session in browser localStorage.
+If attachment is unavailable, chat shows a message instead of download:
 
-## Troubleshooting
+- `Attachment was removed by admin`, or
+- `File no longer available on server`.
 
-Cannot login:
-- verify username/password.
-- verify server URL includes protocol (`http://` or `https://`).
+## 7) Presence usage
 
-Cannot load messages:
-- verify server is running.
-- verify token has not expired.
-- check browser console/network for API errors.
+- Users sidebar shows all registered users.
+- Each user is marked online/offline.
+- Presence updates periodically.
 
-Admin panel inaccessible:
-- verify `server` container is up.
-- verify `/admin/login` route.
-- check that `SECRET_KEY` is set and stable.
+## 8) Logout/session behavior
 
-Database issues:
-- check MySQL container health in `docker compose ps`.
-- verify `DATABASE_URL` matches MySQL credentials.
+### User app
+
+- Session is browser-session scoped.
+- Closing tab/window removes login persistence.
+- Reopening app requires fresh login.
+
+### Admin panel
+
+- Manual logout available via dashboard.
+- Auto logout after inactivity for safety.
+
+## 9) Practical troubleshooting
+
+### Cannot login
+
+- verify server URL fields (protocol/domain/port),
+- verify username/password,
+- verify server is reachable.
+
+### File upload rejected
+
+- check current upload limit,
+- check if uploads are disabled by admin,
+- reduce total selected file size.
+
+### Download fails
+
+- attachment may have been removed by admin,
+- file may no longer exist on server volume.
+
+### Chat jumps while reading old messages
+
+- current behavior should preserve scroll while you are away from bottom,
+- if not, refresh and test again with latest app frontend.

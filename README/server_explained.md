@@ -1,101 +1,104 @@
 # Server Explained
 
-## Purpose of `server`
+## 1) Server role
 
-The `server` folder is the central backend of the project.
-It exposes API endpoints for authentication, messages, and user management.
-It also serves the admin panel UI.
+`server` is the central authority for:
 
-## Framework choice
+- authentication and authorization,
+- message and attachment persistence,
+- upload policy enforcement,
+- admin panel operations,
+- runtime settings (upload limit, uploads enabled).
 
-FastAPI was selected because:
+## 2) Startup lifecycle (`server/main.py`)
 
-- clean request/response modeling with Pydantic.
-- simple dependency injection for auth/db.
-- straightforward async-ready architecture.
-- good fit for modular API structure.
+On startup:
 
-## Startup flow
+1. `init_db()` creates tables and applies lightweight compatibility column checks.
+2. `ensure_uploads_dir()` prepares upload folder.
+3. `create_default_admin()` ensures admin exists.
+4. Upload settings are initialized in `app_settings` if missing.
+5. Middleware is attached:
+   - `SessionMiddleware` for admin panel,
+   - `CORSMiddleware` for browser API calls.
+6. API router and admin router are mounted.
 
-Entry point is `server/main.py`.
+## 3) Main modules
 
-When server starts:
+- `config.py`: env-backed settings.
+- `database.py`: SQLAlchemy engine/session/base and startup schema compatibility checks.
+- `models.py`: `User`, `Message`, `MessageAttachment`, `AppSetting`.
+- `schemas.py`: API request/response models.
+- `auth.py`: bcrypt hashing + JWT auth dependencies.
+- `presence.py`: online status heartbeat.
+- `chat_settings.py`: persistent upload limit + upload enabled setting logic.
+- `upload_service.py`: secure filename handling, storage, size validation, cleanup.
+- `user_cleanup.py`: user cascade cleanup logic (DB + file cleanup safety).
+- `routes.py`: `/api` endpoints.
+- `admin.py`: server-rendered admin panel routes.
 
-1. `init_db()` creates tables if missing.
-2. `create_default_admin()` ensures initial admin account exists.
-3. middleware is attached (sessions + CORS).
-4. static files are mounted (`/static`).
-5. API and admin routers are included.
+## 4) API auth behavior
 
-## Module breakdown
+- Login endpoint validates username/password hash.
+- JWT is issued with `sub` and `is_admin` fields.
+- Protected endpoints require bearer token.
+- `get_current_admin` enforces admin role for admin API endpoints.
 
-`config.py`
-- Central place for env-driven settings.
-- Includes database URL, secrets, CORS, default admin credentials.
+## 5) Chat behavior
 
-`database.py`
-- SQLAlchemy engine/session setup.
-- `get_db()` dependency for request-scoped sessions.
+- Messages are loaded with author and reply context.
+- Reply stores parent id + fallback snapshot (`reply_to_username`, `reply_to_content`).
+- Deleting parent message does not break child replies.
+- Message deletion also cleans related files when needed.
 
-`models.py`
-- ORM entities: `User`, `Message`.
+## 6) Upload behavior
 
-`schemas.py`
-- Pydantic request/response models.
+- `POST /api/messages` accepts multipart with `files` list.
+- Backend enforces total upload size for all files in request.
+- Uploads are saved with generated storage key.
+- Attachment metadata stored in `message_attachments`.
+- Legacy single-file fields on `messages` are kept for compatibility.
 
-`auth.py`
-- Password hashing and verification.
-- JWT create/decode logic.
-- dependencies `get_current_user` and `get_current_admin`.
+## 7) Upload policy behavior
 
-`routes.py`
-- API endpoints under `/api`.
-- login, chat, user management, stats.
+- Upload size limit is stored in `app_settings` (`max_upload_bytes`).
+- Upload enabled/disabled is stored in `app_settings` (`uploads_enabled`).
+- Endpoint `/api/settings/upload-limit` returns both values for frontend sync.
+- If uploads are disabled, backend rejects upload attempts with clear 403 message.
 
-`admin.py`
-- Admin web routes (`/admin/...`).
-- session-based admin login.
-- dashboard + create/delete users.
+## 8) Admin panel behavior
 
-## API endpoint groups
+Admin panel routes are in `admin.py`:
 
-Public:
-- `GET /api/health`
-- `POST /api/auth/login`
+- session-based login/logout,
+- dashboard rendering,
+- user create/delete,
+- password change,
+- message delete,
+- upload limit update,
+- clear all messages,
+- clear all uploads,
+- uploads enable/disable.
 
-Authenticated user:
-- `GET /api/me`
-- `GET /api/messages`
-- `POST /api/messages`
+Additional safeguards:
 
-Authenticated admin:
-- `GET /api/users`
-- `POST /api/users`
-- `DELETE /api/users/{id}`
-- `GET /api/stats`
+- self-delete protection for current admin,
+- confirmation dialogs in UI for dangerous actions,
+- inactivity auto-logout handling (frontend timer + logout route).
 
-## Auth model
+## 9) Presence behavior
 
-Login receives username/password.
-Server verifies password hash.
-Server returns JWT token.
-Token payload includes `sub` (username) and admin flag.
-Protected routes require token and resolve current user via dependency.
+- Presence is in-memory and time-based.
+- Each authenticated request marks user active.
+- Timeout removes stale active users.
+- `/api/users/presence` returns full user list with online boolean.
 
-## Admin panel model
+## 10) What to update when extending server
 
-Admin panel is classic server-rendered web:
+If you add backend features, update all of these together:
 
-- login form posts to `/admin/login`.
-- server stores admin id in session cookie.
-- dashboard validates session on every request.
-
-This is separate from bearer-token API auth.
-
-## What to watch when modifying `server`
-
-- Keep clear separation between API auth and admin session auth.
-- Do not bypass `get_current_admin` checks on admin APIs.
-- Keep DB session lifecycle via `get_db`.
-- If changing schemas, update ORM and docs together.
-- If moving to production, rotate secrets and tighten CORS.
+- model(s),
+- schema(s),
+- route handlers,
+- admin panel UI if needed,
+- documentation (`README/api_reference.md`, `README/features.md`).

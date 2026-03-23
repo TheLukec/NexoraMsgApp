@@ -11,6 +11,10 @@
     <h1>Nexora Admin Panel</h1>
     <p>Sign in with an admin account.</p>
 
+    {% if notice %}
+      <div class="notice">{{ notice }}</div>
+    {% endif %}
+
     {% if error %}
       <div class="notice error">{{ error }}</div>
     {% endif %}
@@ -27,3 +31,4 @@
   </main>
 </body>
 </html>
+

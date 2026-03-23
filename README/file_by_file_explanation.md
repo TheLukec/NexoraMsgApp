@@ -1,297 +1,264 @@
 # File by File Explanation
 
-This document explains each important file using the same structure:
+This document explains the most important project files.
+For each file: what it does, why it exists, interactions, main parts, and change cautions.
 
-- What it does.
-- Why it exists.
-- How it works with other files.
-- Main functions/classes/code blocks.
-- What to watch when changing it.
+## Root
 
-## Root files
+## `README.md`
 
-### `.gitignore`
+- What: project landing documentation.
+- Why: first overview for setup and architecture.
+- Interacts with: references all files in `README/`.
+- Main parts: features, quick start, structure, links.
+- Change caution: keep commands and structure synchronized with real files.
 
-- What it does: prevents virtualenv, cache, and secret env files from being committed.
-- Why it exists: keeps repository clean and avoids leaking credentials.
-- Collaboration: affects git behavior for both `app` and `server`.
-- Main parts: ignore rules for `.venv`, `__pycache__`, `*.pyc`, `.env`.
-- Change caution: do not remove `.env` ignores unless you intentionally version config secrets.
+## App (`app/`)
 
-### `README.md`
+## `app/main.py`
 
-- What it does: gives top-level project description and quick run instructions.
-- Why it exists: first entry point for new users of the repository.
-- Collaboration: references both runtime components and Docker setup.
-- Main parts: architecture summary, setup commands, endpoint list.
-- Change caution: keep commands synchronized with actual file names and ports.
+- What: Flask entry point.
+- Why: serves browser UI locally.
+- Interacts with: `config.py`, `gui.py`, `routes.py`.
+- Main parts: `create_app()`, startup block.
+- Change caution: keep static/template paths aligned with filesystem.
 
-## App files
+## `app/config.py`
 
-### `app/config.py`
+- What: local app host/port/browser settings.
+- Why: avoid hardcoded constants in runtime code.
+- Interacts with: `app/main.py`.
+- Main parts: `Settings` dataclass.
+- Change caution: update docs when defaults change.
 
-- What it does: stores local app host/port and browser auto-open flag.
-- Why it exists: central config avoids hardcoded values in startup logic.
-- Collaboration: imported by `app/main.py`.
-- Main parts: `Settings` dataclass and `settings` instance.
-- Change caution: if you rename config variables, update startup references in `main.py`.
+## `app/gui.py`
 
-### `app/gui.py`
+- What: delayed browser opener.
+- Why: opens app page automatically after startup.
+- Interacts with: called by `app/main.py`.
+- Main parts: `open_in_browser`.
+- Change caution: avoid too-short delay that races Flask startup.
 
-- What it does: opens system browser after short delay.
-- Why it exists: improves user experience by launching UI automatically.
-- Collaboration: called from `app/main.py` startup block.
-- Main parts: `open_in_browser(url)` and timer callback.
-- Change caution: too short delay can open browser before Flask is ready.
+## `app/routes.py`
 
-### `app/main.py`
+- What: Flask route declarations.
+- Why: keep route logic separated from bootstrapping.
+- Interacts with: blueprint registration in `app/main.py`.
+- Main parts: `/` route rendering `index.html`.
+- Change caution: if route path changes, update docs and launcher expectations.
 
-- What it does: creates Flask app, registers routes, starts web server.
-- Why it exists: runtime entry point for local client app.
-- Collaboration: imports `config.py`, `gui.py`, `routes.py`.
-- Main parts: `create_app()`, global `app`, `if __name__ == "__main__"` block.
-- Change caution: keep static/template paths valid when reorganizing folders.
+## `app/templates/index.html`
 
-### `app/routes.py`
+- What: main UI markup.
+- Why: defines login + chat + sidebar structure.
+- Interacts with: IDs/classes used by `app.js` and `style.css`.
+- Main parts: login form, chat panel, reply preview, upload controls, sidebar sections.
+- Change caution: keep element IDs stable or update JS selectors.
 
-- What it does: defines HTTP route for root page.
-- Why it exists: separates route declarations from startup file.
-- Collaboration: blueprint registered in `app/main.py`.
-- Main parts: blueprint `web`, route `index()`.
-- Change caution: if route path changes, update user instructions.
+## `app/static/app.js`
 
-### `app/requirements.txt`
+- What: primary frontend controller.
+- Why: owns runtime UI state and API communication.
+- Interacts with: all `/api` endpoints and DOM in `index.html`.
+- Main parts:
+  - auth/login/logout,
+  - session restore (sessionStorage),
+  - message polling and rendering,
+  - reply state,
+  - delete message,
+  - presence polling,
+  - upload selection/progress/validation,
+  - upload-limit refresh and uploads-enabled handling.
+- Change caution:
+  - keep auth handling consistent for all protected calls,
+  - avoid duplicating submit logic,
+  - preserve scroll behavior and status feedback.
 
-- What it does: lists Python dependency for local app runtime.
-- Why it exists: reproducible setup for client app environment.
-- Collaboration: used in setup guide commands.
-- Main parts: `Flask` package requirement.
-- Change caution: keep compatible with Python 3.12.10.
+## `app/static/style.css`
 
-### `app/templates/index.html`
+- What: app UI styling.
+- Why: keeps layout usable and readable on desktop/mobile.
+- Interacts with: class names in `index.html` + generated elements from `app.js`.
+- Main parts: login layout, chat bubbles, sidebar, upload row, progress bar, wrapping fixes.
+- Change caution: do not break `hidden` and flex alignment classes used in JS flow.
 
-- What it does: renders login UI and chat UI containers.
-- Why it exists: structure for browser interface served by Flask.
-- Collaboration: styled by `styles.css`, controlled by `app.js`.
-- Main parts: login form, chat panel, message list container, send form.
-- Change caution: keep element IDs in sync with JavaScript selectors.
+## Server (`server/`)
 
-### `app/static/app.js`
+## `server/main.py`
 
-- What it does: frontend logic for login, token storage, chat refresh, message send.
-- Why it exists: browser-side controller for user interaction.
-- Collaboration: calls server API endpoints and updates HTML from `index.html`.
-- Main parts: state object, `login()`, `fetchMessages()`, `sendMessage()`, `logout()`.
-- Change caution: auth header handling must stay consistent on all protected requests.
+- What: FastAPI app assembly and startup lifecycle.
+- Why: central boot process.
+- Interacts with: `database.py`, `chat_settings.py`, `upload_service.py`, routers.
+- Main parts: lifespan startup, middleware setup, router include.
+- Change caution: startup order matters (DB and settings before traffic).
 
-### `app/static/styles.css`
+## `server/config.py`
 
-- What it does: styles login and chat screens.
-- Why it exists: keeps UI readable and usable on desktop/mobile.
-- Collaboration: linked by `index.html`.
-- Main parts: layout, message list styling, responsive media query.
-- Change caution: avoid removing `.hidden` behavior used by JS view switching.
+- What: environment-backed server settings.
+- Why: centralizes runtime config.
+- Interacts with: most backend modules.
+- Main parts: DB URL, secrets, upload config, defaults.
+- Change caution: if key names change, update `.env.example`, compose, and docs.
 
-## Server files
+## `server/database.py`
 
-### `server/config.py`
+- What: SQLAlchemy engine/session/base + startup compatibility checks.
+- Why: shared DB plumbing and backwards-safe column initialization.
+- Interacts with: models, routes, startup.
+- Main parts: `get_db()`, `init_db()`, compatibility helpers.
+- Change caution: DB compatibility logic must remain idempotent.
 
-- What it does: loads environment-driven server settings.
-- Why it exists: centralized configuration for secrets, DB URL, host, CORS.
-- Collaboration: imported by `main.py`, `database.py`, and `auth.py`.
-- Main parts: `Settings` dataclass, `parsed_cors_origins()`.
-- Change caution: if settings keys change, update `.env.example` and docs.
+## `server/models.py`
 
-### `server/database.py`
+- What: ORM schema.
+- Why: source of truth for DB structure.
+- Interacts with: all route/business modules.
+- Main parts: `User`, `Message`, `MessageAttachment`, `AppSetting`.
+- Change caution: schema changes require synchronized updates in schemas/routes/docs.
 
-- What it does: defines SQLAlchemy engine/session/base and DB init helper.
-- Why it exists: shared DB access layer for all routes.
-- Collaboration: used by `models.py`, `main.py`, `routes.py`, `admin.py`.
-- Main parts: `engine`, `SessionLocal`, `Base`, `get_db()`, `init_db()`.
-- Change caution: keep `get_db()` lifecycle pattern to avoid connection leaks.
+## `server/schemas.py`
 
-### `server/models.py`
+- What: request/response models.
+- Why: input validation and stable API payloads.
+- Interacts with: `routes.py`.
+- Main parts: login/user/message/attachment/settings response models.
+- Change caution: changing response shape may break frontend rendering.
 
-- What it does: declares ORM models for users and messages.
-- Why it exists: defines relational database schema in code.
-- Collaboration: queried by API and admin routes.
-- Main parts: classes `User`, `Message` and relationships.
-- Change caution: schema changes require route/schema/doc updates and migration strategy.
+## `server/auth.py`
 
-### `server/schemas.py`
+- What: password hashing and JWT auth dependencies.
+- Why: isolate auth logic from route handlers.
+- Interacts with: routes and admin helper logic.
+- Main parts: `hash_password`, `verify_password`, token creation, dependency guards.
+- Change caution: changing token claims requires frontend/backward compatibility checks.
 
-- What it does: defines API request/response models.
-- Why it exists: validates input and standardizes output payloads.
-- Collaboration: imported by `routes.py`.
-- Main parts: `LoginRequest`, `UserCreate`, `UserPublic`, `MessageCreate`, `MessageOut`, `StatsOut`.
-- Change caution: response model edits can break frontend expectations.
+## `server/presence.py`
 
-### `server/auth.py`
+- What: in-memory online tracking.
+- Why: lightweight online/offline state.
+- Interacts with: `routes.py` heartbeat calls.
+- Main parts: `mark_active`, `mark_inactive`, timeout cleanup.
+- Change caution: this is process-memory only, not cross-instance persistent.
 
-- What it does: handles password hashing and JWT authentication dependencies.
-- Why it exists: keeps security logic isolated and reusable.
-- Collaboration: used by `routes.py`, `admin.py`, and `main.py`.
-- Main parts: `hash_password`, `verify_password`, `create_access_token`, `get_current_user`, `get_current_admin`.
-- Change caution: secret key and algorithm changes invalidate old tokens.
+## `server/chat_settings.py`
 
-### `server/routes.py`
+- What: persistent server settings service.
+- Why: runtime-configurable upload policy.
+- Interacts with: `routes.py`, `admin.py`, startup bootstrap.
+- Main parts: get/set for `max_upload_bytes` and `uploads_enabled`.
+- Change caution: validate ranges and normalize boolean values.
 
-- What it does: exposes REST API endpoints for chat and user management.
-- Why it exists: core server business logic lives here.
-- Collaboration: uses DB sessions, models, schemas, and auth dependencies.
-- Main parts: login endpoint, message read/write endpoints, admin user endpoints, stats endpoint.
-- Change caution: never remove auth dependencies from protected endpoints.
+## `server/upload_service.py`
 
-### `server/admin.py`
+- What: upload file handling.
+- Why: secure file naming/storage/size validation.
+- Interacts with: `routes.py`, cleanup routines.
+- Main parts: sanitize name, generate storage key, save files, delete files.
+- Change caution:
+  - never trust user filename/path,
+  - keep traversal protections,
+  - preserve total-size validation.
 
-- What it does: provides admin web GUI routes with session auth.
-- Why it exists: owner-friendly management interface without API tooling.
-- Collaboration: uses Jinja templates, DB models, password verification/hash functions.
-- Main parts: login/logout, dashboard render, create/delete user routes.
-- Change caution: keep `_load_admin_user` checks in place to protect admin routes.
+## `server/user_cleanup.py`
 
-### `server/main.py`
+- What: deep cleanup when deleting user data.
+- Why: prevent orphan DB rows/files.
+- Interacts with: `routes.py` and `admin.py` delete-user actions.
+- Main parts: collect message IDs, cleanup attachments/files, preserve reply integrity.
+- Change caution: keep delete order predictable and safe against shared file references.
 
-- What it does: application assembly and startup lifecycle.
-- Why it exists: bootstraps entire server runtime.
-- Collaboration: wires config, middleware, routers, static files, DB init.
-- Main parts: `create_default_admin`, lifespan startup, `app` object, root endpoint.
-- Change caution: avoid breaking startup order (`init_db` before API use).
+## `server/routes.py`
 
-### `server/requirements.txt`
+- What: REST API logic for app clients.
+- Why: main business operations.
+- Interacts with: auth, models, schemas, settings, upload service, presence.
+- Main parts:
+  - auth endpoints,
+  - message CRUD,
+  - reply support,
+  - attachment downloads,
+  - upload-limit endpoint,
+  - presence,
+  - admin API user management.
+- Change caution: authorization checks must stay strict.
 
-- What it does: lists backend dependencies.
-- Why it exists: reproducible backend environment setup.
-- Collaboration: used by Docker image build and local setup.
-- Main parts: FastAPI, SQLAlchemy, MySQL driver, auth/crypto libs.
-- Change caution: update versions carefully to avoid compatibility breaks.
+## `server/admin.py`
 
-### `server/Dockerfile`
+- What: admin panel routes and operations.
+- Why: browser GUI for operational management.
+- Interacts with: templates, chat settings, cleanup utilities.
+- Main parts:
+  - session login/logout,
+  - dashboard render,
+  - user/message actions,
+  - maintenance actions,
+  - upload toggle/limit,
+  - inactivity logout notice handling.
+- Change caution: always enforce `_load_admin_user` on protected routes.
 
-- What it does: defines container image for backend server.
-- Why it exists: consistent deployment runtime across machines.
-- Collaboration: built by `docker-compose.yml`.
-- Main parts: python base image, dependency install, code copy, uvicorn command.
-- Change caution: if command changes, keep port and compose mapping synchronized.
+## `server/templates/admin_login.html`
 
-### `server/docker-compose.yml`
+- What: admin login UI.
+- Why: entry point for admin session auth.
+- Interacts with: `admin.py` notices/errors.
+- Main parts: login form and notice rendering.
+- Change caution: keep input names aligned with backend `Form(...)` fields.
 
-- What it does: orchestrates MySQL and server containers.
-- Why it exists: one-command startup for complete backend stack.
-- Collaboration: uses `.env` values and `Dockerfile`.
-- Main parts: `mysql` service, `server` service, healthcheck, volume.
-- Change caution: DB credentials must match `DATABASE_URL`.
+## `server/templates/admin_dashboard.html`
 
-### `server/.env.example`
+- What: admin dashboard UI.
+- Why: manage users, messages, uploads, and settings.
+- Interacts with: `admin.py` forms and notices.
+- Main parts:
+  - stats,
+  - create/change/delete forms,
+  - danger zone actions,
+  - scroll-preserve script,
+  - inactivity auto-logout timer script.
+- Change caution: action URLs and hidden input names must match route handlers.
 
-- What it does: template for runtime environment variables.
-- Why it exists: documents required configuration keys.
-- Collaboration: copied to `.env` and consumed by compose/server.
-- Main parts: DB credentials, app host/port, secret key, default admin values.
-- Change caution: do not store real production secrets in this template.
+## `server/static/admin.css`
 
-### `server/initdb/01-init.sql`
+- What: admin panel styling.
+- Why: readable and usable operations UI.
+- Interacts with: both admin templates.
+- Main parts: panel/table/button/danger-zone styles.
+- Change caution: keep class names synchronized with templates.
 
-- What it does: sets character handling during initial MySQL init.
-- Why it exists: ensures expected text encoding baseline.
-- Collaboration: executed automatically by MySQL container init hook.
+## `server/docker-compose.yml`
+
+- What: container orchestration for server + MySQL.
+- Why: reproducible setup with persistent storage.
+- Interacts with: Dockerfile, `.env`, `initdb`, volumes.
+- Main parts: `mysql`, `server`, `mysql_data`, `chat_uploads`.
+- Change caution: keep `UPLOADS_DIR` and volume mount path aligned.
+
+## `server/Dockerfile`
+
+- What: image definition for server container.
+- Why: deterministic backend runtime.
+- Interacts with: `requirements.txt`, source files, compose.
+- Main parts: Python 3.12.10 base, install deps, uvicorn command.
+- Change caution: keep exposed port/command consistent with compose.
+
+## `server/.env.example`
+
+- What: environment template.
+- Why: documents required runtime variables.
+- Interacts with: config + compose.
+- Main parts: DB, auth, admin defaults, uploads.
+- Change caution: template only; do not put real secrets in VCS.
+
+## `server/initdb/01-init.sql`
+
+- What: MySQL init script.
+- Why: ensures expected charset defaults on fresh DB init.
+- Interacts with: MySQL container startup.
 - Main parts: `SET NAMES utf8mb4`.
-- Change caution: keep init scripts idempotent and safe on first startup.
+- Change caution: keep startup scripts safe and idempotent.
 
-### `server/templates/admin_login.html`
+## Documentation files (`README/`)
 
-- What it does: admin login page template.
-- Why it exists: entry point for admin panel authentication.
-- Collaboration: rendered by `admin.py`, styled by `static/admin.css`.
-- Main parts: username/password form and error notice block.
-- Change caution: form field names must match backend `Form(...)` parameter names.
+- These files explain architecture, setup, usage, API, and module responsibilities.
+- Change caution: whenever features change, update docs in the same PR/commit.
 
-### `server/templates/admin_dashboard.html`
-
-- What it does: dashboard template with stats, create form, users table.
-- Why it exists: central admin UI for user management.
-- Collaboration: rendered by `admin.py`.
-- Main parts: overview stats section, create-user form, delete buttons.
-- Change caution: action URLs must match admin route paths.
-
-### `server/static/admin.css`
-
-- What it does: styles admin login and dashboard pages.
-- Why it exists: improves readability and usability of admin panel.
-- Collaboration: loaded by both admin templates.
-- Main parts: layout styles, table formatting, buttons, notice states.
-- Change caution: do not remove classes used in templates (`notice`, `danger`, etc.).
-
-## README folder files
-
-### `README/README.md`
-
-- What it does: index for the detailed documentation set.
-- Why it exists: helps reader navigate documents quickly.
-- Collaboration: links conceptual and practical guides.
-- Main parts: document list and recommended reading order.
-- Change caution: keep links and file names aligned with actual docs.
-
-### `README/project_overview.md`
-
-- What it does: explains goals, architecture, and constraints.
-- Why it exists: high-level context for presentations and onboarding.
-- Collaboration: complements technical deep-dive docs.
-- Main parts: architecture map, design goals, future upgrade ideas.
-- Change caution: keep overview synchronized with real implementation.
-
-### `README/app_explained.md`
-
-- What it does: deep explanation of client app behavior.
-- Why it exists: clarifies browser and Flask responsibilities.
-- Collaboration: pairs with `server_explained.md` and flow guide.
-- Main parts: startup sequence, frontend state, API interaction.
-- Change caution: update when app-side auth or state logic changes.
-
-### `README/server_explained.md`
-
-- What it does: deep explanation of backend architecture and APIs.
-- Why it exists: makes backend design easy to explain to others.
-- Collaboration: references auth, DB, and admin docs.
-- Main parts: startup flow, endpoint groups, module roles.
-- Change caution: update if routes/middleware/auth model changes.
-
-### `README/database_explained.md`
-
-- What it does: explains schema and data lifecycle.
-- Why it exists: provides clear model-level understanding.
-- Collaboration: supports server and admin documentation.
-- Main parts: tables, relations, migration notes.
-- Change caution: update immediately after schema changes.
-
-### `README/admin_panel_explained.md`
-
-- What it does: explains admin GUI architecture and security behavior.
-- Why it exists: admin features are separate from API auth model.
-- Collaboration: tied to `server/admin.py` and admin templates.
-- Main parts: route descriptions, session flow, dashboard logic.
-- Change caution: keep route descriptions aligned with implementation.
-
-### `README/setup_guide.md`
-
-- What it does: installation and startup instructions.
-- Why it exists: step-by-step reproducibility for new users.
-- Collaboration: uses `requirements.txt`, `.env.example`, docker files.
-- Main parts: Docker path, non-Docker path, config explanation.
-- Change caution: command updates must match current runtime.
-
-### `README/usage_guide.md`
-
-- What it does: practical operational instructions for admin/users.
-- Why it exists: clarifies day-to-day usage and troubleshooting.
-- Collaboration: depends on setup + admin panel + app behavior docs.
-- Main parts: owner workflow, user workflow, troubleshooting section.
-- Change caution: keep with latest UI/API behavior.
-
-### `README/program_flow_step_by_step.md`
-
-- What it does: explains runtime flow in sequential scenarios.
-- Why it exists: ideal for teaching and presenting execution logic.
-- Collaboration: bridges conceptual docs and source code.
-- Main parts: server start, app start, login, send message, admin actions.
-- Change caution: update when control flow changes in main/auth/routes/admin code.

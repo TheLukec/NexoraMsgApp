@@ -1,91 +1,101 @@
 # App Explained
 
-## Purpose of `app`
+## 1) App role
 
-The `app` folder contains a local client application.
-Its job is to provide an easy browser interface for users.
+The `app` folder contains the local launcher UI for end users.
 
-Important: this app does not store chat data.
-It only communicates with the central `server` API.
+Responsibilities:
 
-## Runtime behavior
+- serve static browser UI,
+- capture server connection/login input,
+- call server API endpoints,
+- render chat/presence/upload state.
 
-When `python main.py` is executed:
+The app does **not** own persistent chat data; the server does.
 
-1. Flask app starts on `APP_HOST:APP_PORT` (default `127.0.0.1:5000`).
-2. Browser is opened automatically (`gui.open_in_browser`).
-3. Root route renders `templates/index.html`.
-4. Frontend JavaScript handles login and chat operations.
+## 2) Runtime behavior
 
-## Main files and roles
+`python main.py` does:
 
-`config.py`
-- Holds local host/port config.
-- Controls browser auto-open behavior.
+1. Start Flask app on `APP_HOST:APP_PORT`.
+2. Optionally auto-open browser (`APP_OPEN_BROWSER=1`).
+3. Serve `index.html`, `style.css`, and `app.js`.
 
-`gui.py`
-- Opens the browser in a timed thread so Flask can boot first.
+## 3) Login UI and auth flow
 
-`main.py`
-- Creates Flask app.
-- Registers routes.
-- Starts local server process.
+Login form uses three connection fields:
 
-`routes.py`
-- Defines the `/` route.
-- Returns the main HTML page.
+- protocol (`http://` or `https://`),
+- domain or IP,
+- port.
 
-`templates/index.html`
-- Login form (server URL, username, password).
-- Chat view (messages, send box, refresh/logout buttons).
+Flow:
 
-`static/app.js`
-- Handles all frontend logic:
-- login request.
-- token storage/restore.
-- polling messages every 3 seconds.
-- sending new messages.
-- rendering message list.
+1. Build server URL from the three fields.
+2. Send `POST /api/auth/login`.
+3. Store token + username + server URL in `sessionStorage`.
+4. Switch UI to chat panel.
 
-`static/styles.css`
-- Defines layout and visual styling for login/chat views.
+Important: auth data is intentionally **session-only**.
+Closing tab/window removes login persistence for next reopen.
 
-## How app talks to server
+## 4) Main frontend state (`app.js`)
 
-The app frontend sends requests directly to server API URLs:
+Tracked client state includes:
 
-- Login: `POST /api/auth/login`
-- Fetch messages: `GET /api/messages`
-- Send message: `POST /api/messages`
+- `serverUrl`, `token`, `username`,
+- polling timers,
+- current reply target,
+- selected upload files,
+- upload progress state,
+- `maxUploadMb`, `uploadsEnabled`.
 
-Auth token from login is attached as:
-`Authorization: Bearer <token>`
+## 5) Chat rendering behavior
 
-## Important state in frontend
+- Poll messages every 3 seconds.
+- Render messages, reply context, and attachments.
+- Show delete button only for own messages.
+- Keep scroll stable when user reads older messages.
+- Auto-stick to bottom only when user is already near bottom or after own send.
 
-`state.serverUrl`
-- Which backend host is being used.
+## 6) Reply behavior
 
-`state.token`
-- JWT from login.
+- Clicking `Reply` stores target message in state.
+- Preview box appears above input.
+- Sending includes `parent_message_id`.
+- Cancel clears reply target.
 
-`state.username`
-- Display name for UI info.
+## 7) Upload UI behavior
 
-`state.pollTimer`
-- Interval handler for periodic refresh.
+- Multi-file selector via `+` button.
+- Selected files listed with size and remove (`X`) action.
+- Total selected size displayed and validated against current limit.
+- Progress indicator shown during upload.
+- If uploads disabled by admin, upload controls are disabled and explanatory text is shown.
 
-## What to watch when modifying `app`
+## 8) Presence sidebar behavior
 
-- Keep server URL normalization logic stable.
-- Keep token handling consistent across requests.
-- Do not trust frontend for security checks (server is authority).
-- Keep polling interval reasonable to avoid server overload.
-- If you add features, avoid coupling UI logic into one giant function.
+- Sidebar shows all users with online/offline indicator.
+- Presence list refresh runs separately (every 8 seconds).
+- Login state toggles visibility of Users and Change Password sidebar sections.
 
-## Good extension points
+## 9) Password management in app
 
-- Add message timestamps formatting options.
-- Add connection status indicators (online/offline).
-- Add retry/backoff strategy for temporary network errors.
-- Add optional WebSocket mode later for real-time updates.
+- User can change own password from sidebar form.
+- Validates current password and confirmation match in UI.
+- Calls backend endpoint for final verification/update.
+
+## 10) Error handling style
+
+- Network/API errors are surfaced in status area.
+- 401 responses trigger logout flow and return to login panel.
+- Upload validation errors shown before request when possible.
+
+## 11) Key files
+
+- `main.py`: Flask app startup.
+- `routes.py`: root route that renders template.
+- `gui.py`: delayed browser opener.
+- `templates/index.html`: structure for login/chat/sidebar.
+- `static/app.js`: full client logic.
+- `static/style.css`: UI styling, layout, and responsive behavior.

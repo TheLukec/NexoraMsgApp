@@ -280,9 +280,65 @@
         });
       }
 
+      const ADMIN_INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000;
+      const ADMIN_ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
+
+      let inactivityTimerId = null;
+      let autoLogoutTriggered = false;
+
+      function clearInactivityTimer() {
+        if (inactivityTimerId !== null) {
+          clearTimeout(inactivityTimerId);
+          inactivityTimerId = null;
+        }
+      }
+
+      function triggerAdminInactivityLogout() {
+        if (autoLogoutTriggered) {
+          return;
+        }
+
+        autoLogoutTriggered = true;
+        clearInactivityTimer();
+
+        // Route clears server session and forwards to login with inactivity notice.
+        window.location.assign("/admin/logout?reason=inactive");
+      }
+
+      function resetAdminInactivityTimer() {
+        if (autoLogoutTriggered) {
+          return;
+        }
+
+        clearInactivityTimer();
+        inactivityTimerId = setTimeout(triggerAdminInactivityLogout, ADMIN_INACTIVITY_TIMEOUT_MS);
+      }
+
+      function handleAdminActivity() {
+        resetAdminInactivityTimer();
+      }
+
+      function bindAdminInactivityTimer() {
+        ADMIN_ACTIVITY_EVENTS.forEach((eventName) => {
+          const usePassive = eventName === "scroll" || eventName === "touchstart";
+          window.addEventListener(eventName, handleAdminActivity, usePassive ? { passive: true } : undefined);
+        });
+
+        window.addEventListener("beforeunload", () => {
+          clearInactivityTimer();
+          ADMIN_ACTIVITY_EVENTS.forEach((eventName) => {
+            window.removeEventListener(eventName, handleAdminActivity);
+          });
+        });
+
+        resetAdminInactivityTimer();
+      }
+
       restoreScrollState();
       bindAdminActionForms();
+      bindAdminInactivityTimer();
     })();
   </script>
 </body>
 </html>
+

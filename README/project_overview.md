@@ -1,70 +1,82 @@
 # Project Overview
 
-## What this project is
+## 1) What the project does
 
-Nexora is a simple group chat system with two clearly separated parts:
+Nexora Msg App is a simple group chat platform with two parts:
 
-- `server`: central backend that authenticates users and stores chat data.
-- `app`: local client app that opens in browser and lets users chat.
+- `server`: central backend that stores users, messages, attachments, and server settings.
+- `app`: local user launcher that opens browser UI and communicates with `server` API.
 
-The project is intentionally focused on one shared channel-like conversation.
-There are no direct messages, no voice, and no file sharing.
+The system acts as a lightweight Discord-like alternative for a **single shared server chat**.
 
-## Main goals
+## 2) Scope and constraints
 
-- Keep architecture easy to understand for learning and presentations.
-- Keep code modular so future upgrades are straightforward.
-- Provide secure password storage and basic authentication.
-- Provide practical admin tools for managing users.
-- Make local setup easy with Docker for backend + MySQL.
+Implemented scope:
 
-## High-level architecture
+- one global group chat stream,
+- user authentication,
+- admin management UI,
+- attachment uploads with server-side limits,
+- reply, delete, and presence features.
 
-The system has 3 runtime pieces:
+Out-of-scope by design:
 
-1. Browser UI (JavaScript) inside the `app`.
-2. Python backend for the local `app` (Flask) that serves HTML/CSS/JS.
-3. Python backend for central `server` (FastAPI) + MySQL database.
+- DMs,
+- channels,
+- voice/video,
+- reactions,
+- rich moderation hierarchy.
 
-Communication path:
+## 3) Current feature set
 
-1. User starts `app` locally.
-2. Browser opens `http://127.0.0.1:5000`.
-3. User enters server URL, username, password.
-4. JS frontend sends login request to `server` API.
-5. Server returns JWT token.
-6. JS stores token in localStorage and uses it for chat API calls.
-7. Messages are written to and read from MySQL via SQLAlchemy.
+### User-facing
 
-## Why app and server are separated
+- Login with protocol/domain-or-IP/port fields.
+- Periodic message refresh (3s).
+- Reply to one existing message (single-level).
+- Delete own messages.
+- Active users sidebar with online/offline state.
+- Multi-file upload per message.
+- Remove selected files before submit.
+- Upload progress indicator.
+- Upload limit display in UI.
+- Attachment unavailable notice if file was removed.
+- Password change form in app sidebar.
+- Stable scroll behavior when reading older messages.
 
-- It matches real-world distributed systems.
-- User interface can evolve independently from server API.
-- Server can run on host machine or remote VPS.
-- Multiple users can connect from different client machines.
+### Admin-facing
 
-## Security model (basic)
+- Admin login with server-side session.
+- Dashboard with stats and management forms.
+- Create user / delete user.
+- Change any user password.
+- Delete any message.
+- Change upload size limit.
+- Disable/enable uploads globally.
+- Clear all uploads (keep messages, mark attachments unavailable).
+- Clear all messages + all attachments + physical files.
+- Auto logout after 2 minutes of inactivity.
+- Scroll position preservation after dashboard actions.
 
-- Passwords are never stored as plain text.
-- Passwords are hashed with bcrypt via `passlib`.
-- Authenticated API requests require bearer token.
-- Admin-only endpoints are protected by admin checks.
-- Admin panel uses server-side session cookie.
+### Storage and operations
 
-## Key limitations by design
+- MySQL persistence for users, messages, attachments, app settings.
+- Upload files stored on server filesystem.
+- Docker volumes for DB and uploads (`mysql_data`, `chat_uploads`).
 
-- Single shared chat context.
-- No channels, no DMs, no message editing/deleting.
-- No role hierarchy beyond `is_admin`.
-- No rate limiting and no production hardening layers yet.
+## 4) Why this is useful for learning/presentation
 
-These are acceptable for a teaching/learning base project.
+- Clear separation between client app and shared server backend.
+- Real-world concepts in manageable scope:
+  - JWT auth,
+  - session auth,
+  - role checks,
+  - relational data,
+  - file handling,
+  - admin operations,
+  - Dockerized deployment.
 
-## Suggested future upgrades
+## 5) Project status
 
-- Add Alembic migrations.
-- Add refresh tokens and token revocation.
-- Add pagination with `since_id` or timestamps.
-- Add channel support (`channels` table + channel_id on messages).
-- Add HTTPS and reverse proxy deployment examples.
-- Add testing suite (unit + integration + API tests).
+The implementation is intentionally "simple but complete" for a classroom/demo baseline.
+It is modular and ready for incremental upgrades (channels, WebSocket, tests, migrations).

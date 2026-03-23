@@ -1,82 +1,98 @@
 # Admin Panel Explained
 
-## Purpose
+## 1) Purpose
 
-The admin panel provides a simple web GUI for server owner tasks:
+Admin panel is the operational control surface for server owner.
 
-- admin login.
-- user creation.
-- user deletion.
-- basic server overview.
+It is used for:
 
-It exists so owner does not need to call raw API endpoints manually.
+- account management,
+- moderation actions,
+- upload policy management,
+- server maintenance actions.
 
-## Where implementation lives
+## 2) Auth model
 
-- Backend routes: `server/admin.py`
-- HTML templates: `server/templates/admin_login.html`, `server/templates/admin_dashboard.html`
-- Styling: `server/static/admin.css`
+- Admin panel uses server-side session (`SessionMiddleware`).
+- Login is form-based (`/admin/login`).
+- Session stores `admin_user_id`.
+- Protected routes verify session with `_load_admin_user(...)`.
 
-## Session-based auth
+## 3) Inactivity auto logout
 
-Admin panel auth is cookie session based, not JWT based.
+- Dashboard includes frontend inactivity timer set to 2 minutes.
+- Activity events that reset timer:
+  - mousemove,
+  - mousedown/click,
+  - keydown,
+  - scroll,
+  - touchstart.
+- Timeout triggers redirect to `/admin/logout?reason=inactive`.
+- Logout route clears session and redirects to login with message:
+  - `You were logged out due to inactivity`.
 
-Flow:
+## 4) Dashboard sections
 
-1. Admin submits login form.
-2. Server validates admin user credentials.
-3. Server stores `admin_user_id` in session.
-4. Protected admin routes verify session each request.
+### Server overview
 
-Why this approach:
-- convenient for server-rendered pages.
-- simple for forms and redirects.
+- total users,
+- total messages,
+- latest message timestamp,
+- feedback notice area.
 
-## Route behavior
+### Upload settings
 
-`GET /admin/login`
-- render login page.
+- current upload limit display,
+- current uploads enabled/disabled status,
+- form for updating limit.
 
-`POST /admin/login`
-- validate credentials.
-- set session.
-- redirect to dashboard.
+### Server maintenance (danger zone)
 
-`GET /admin`
-- verify active admin session.
-- show stats and user list.
+- `Clear all messages`:
+  - deletes all messages,
+  - deletes all attachment rows,
+  - deletes physical files.
+- `Clear all uploads`:
+  - keeps messages,
+  - marks attachments unavailable,
+  - deletes physical files,
+  - chat UI then shows unavailable attachment notice.
+- `Disable uploads` / `Enable uploads`:
+  - updates persistent setting in DB,
+  - affects all future upload attempts.
 
-`POST /admin/users/create`
-- verify session.
-- validate form values.
-- create user with hashed password.
+### User management
 
-`POST /admin/users/{id}/delete`
-- verify session.
-- prevent deleting currently logged-in admin.
-- remove user and related messages.
+- create user,
+- change user password,
+- delete user.
 
-`GET /admin/logout`
-- clear session.
+Delete user action performs deep cleanup (messages + attachments + physical files) via `user_cleanup.py`.
 
-## Dashboard data shown
+### Message moderation
 
-- total number of users.
-- total number of messages.
-- timestamp of latest message.
-- current users table with admin flag.
+- list recent messages,
+- delete any message,
+- inspect/download available attachments.
 
-## Important implementation details
+## 5) UX safeguards
 
-- Password hashing for new users calls `auth.hash_password`.
-- Admin check uses `is_admin` boolean.
-- Status messages are passed via query parameter `notice`.
-- Dashboard is rendered server-side with Jinja2 templates.
+- Confirmation dialogs on dangerous actions.
+- Scroll position preservation after form submissions.
+- Notice messages after operations.
 
-## What to watch when modifying admin panel
+## 6) Security boundaries
 
-- Keep `_load_admin_user` checks in every admin route.
-- Validate form inputs server-side (not only client-side HTML constraints).
-- Avoid exposing secrets or password hashes in templates.
-- Keep delete protections to avoid lockout scenarios.
-- If adding bulk actions, add confirmation and auditing.
+- Panel routes require admin session.
+- Admin-only operations are not exposed to non-admin panel users.
+- Password updates always store hashes, never plain text.
+- Dangerous actions are explicit form submissions, not hidden frontend-only toggles.
+
+## 7) Important files
+
+- `server/admin.py`
+- `server/templates/admin_login.html`
+- `server/templates/admin_dashboard.html`
+- `server/static/admin.css`
+- `server/user_cleanup.py`
+- `server/chat_settings.py`

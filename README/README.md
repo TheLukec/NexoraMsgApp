@@ -1,29 +1,40 @@
 # Documentation Index
 
-This folder contains detailed documentation for the whole Nexora project.
+This folder contains the full project documentation for **Nexora Msg App**.
 
-## Files in this folder
+## Contents
 
-- `project_overview.md` - high-level goals, architecture, and design choices.
-- `app_explained.md` - local client app explained in detail.
-- `server_explained.md` - backend server explained in detail.
-- `database_explained.md` - database model, storage flow, and schema notes.
-- `admin_panel_explained.md` - admin panel flow and implementation details.
-- `technology_decisions.md` - rationale behind technology and architecture choices.
-- `file_by_file_explanation.md` - explanation of each important file in the repository.
-- `setup_guide.md` - installation and configuration instructions.
-- `usage_guide.md` - practical usage guide for admin and users.
-- `program_flow_step_by_step.md` - execution flow for core scenarios.
+- `project_overview.md` - project purpose, scope, and high-level summary.
+- `architecture.md` - component architecture, auth model, data flow.
+- `features.md` - complete feature catalog (chat, uploads, admin tools, UX behavior).
+- `server_explained.md` - backend modules and runtime behavior.
+- `app_explained.md` - client app behavior, UI state, session behavior.
+- `database_explained.md` - schema, relations, and persistence strategy.
+- `api_reference.md` - API endpoint reference with request/response examples.
+- `admin_panel_explained.md` - admin panel routes, capabilities, and safety features.
+- `setup_guide.md` - installation and run instructions (Docker + local).
+- `usage_guide.md` - practical workflows for user and admin.
+- `program_flow_step_by_step.md` - scenario-based runtime flows.
+- `file_by_file_explanation.md` - key file responsibilities and change notes.
+- `technology_decisions.md` - rationale behind architecture and technology choices.
 
-## Recommended reading order
+## Suggested Reading Order
 
 1. `project_overview.md`
-2. `setup_guide.md`
-3. `server_explained.md`
-4. `app_explained.md`
-5. `database_explained.md`
-6. `admin_panel_explained.md`
-7. `technology_decisions.md`
-8. `program_flow_step_by_step.md`
-9. `file_by_file_explanation.md`
+2. `architecture.md`
+3. `features.md`
+4. `setup_guide.md`
+5. `server_explained.md`
+6. `app_explained.md`
+7. `database_explained.md`
+8. `api_reference.md`
+9. `admin_panel_explained.md`
 10. `usage_guide.md`
+11. `program_flow_step_by_step.md`
+12. `file_by_file_explanation.md`
+13. `technology_decisions.md`
+
+## Notes
+
+- Documentation is synchronized with current implementation (reply, multi-file upload, upload controls, admin maintenance tools, auto logout).
+- If code changes, update docs in this folder together with source files.

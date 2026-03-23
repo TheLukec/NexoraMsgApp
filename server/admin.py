@@ -190,7 +190,11 @@ def _clear_all_uploads_only(db: Session) -> tuple[int, int, int]:
 
 @router.get("/admin/login")
 def admin_login_page(request: Request):
-    return templates.TemplateResponse("admin_login.html", {"request": request, "error": ""})
+    notice = request.query_params.get("notice", "")
+    return templates.TemplateResponse(
+        "admin_login.html",
+        {"request": request, "error": "", "notice": notice},
+    )
 
 
 @router.post("/admin/login")
@@ -204,7 +208,7 @@ def admin_login_submit(
     if user is None or not user.is_admin or not verify_password(password, user.password_hash):
         return templates.TemplateResponse(
             "admin_login.html",
-            {"request": request, "error": "Invalid admin credentials"},
+            {"request": request, "error": "Invalid admin credentials", "notice": ""},
         )
 
     request.session["admin_user_id"] = user.id
@@ -213,9 +217,18 @@ def admin_login_submit(
 
 
 @router.get("/admin/logout")
-def admin_logout(request: Request):
+def admin_logout(request: Request, reason: str | None = None):
     request.session.clear()
-    return RedirectResponse(url="/admin/login", status_code=303)
+
+    notice = ""
+    if reason == "inactive":
+        notice = "You were logged out due to inactivity"
+
+    redirect_url = "/admin/login"
+    if notice:
+        redirect_url += "?notice=" + quote(notice)
+
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 @router.get("/admin/messages")
@@ -549,3 +562,4 @@ def admin_delete_user(user_id: int, request: Request, db: Session = Depends(get_
         f"({summary.deleted_messages} messages, {summary.deleted_files} files)"
     )
     return RedirectResponse(url="/admin?notice=" + quote(notice), status_code=303)
+
