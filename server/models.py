@@ -92,4 +92,3 @@ class AppSetting(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
-

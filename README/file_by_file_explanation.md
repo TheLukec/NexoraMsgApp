@@ -261,4 +261,3 @@ For each file: what it does, why it exists, interactions, main parts, and change
 
 - These files explain architecture, setup, usage, API, and module responsibilities.
 - Change caution: whenever features change, update docs in the same PR/commit.
-

@@ -562,4 +562,3 @@ def admin_delete_user(user_id: int, request: Request, db: Session = Depends(get_
         f"({summary.deleted_messages} messages, {summary.deleted_files} files)"
     )
     return RedirectResponse(url="/admin?notice=" + quote(notice), status_code=303)
-
